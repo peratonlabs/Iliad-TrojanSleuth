@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Algorithm Meta-Parameters",
+  "technique": "Embedding Reassignment",
+  "technique_description": "Perturb an embedding against the gradient, Every X steps, map it to the token whose embedding is closest in terms of cosine similarity. This token is added to a candidate set. The final candidates are finally evaluated on the model as well as known clean models for comparison.",
+  "technique_changes": "Loss function is a weighted average of model and known clean model.",
+  "commit_id": "",
+  "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
+  "required": [ "steps", "steps_reassign", "num_examples", "epsilon", "temp", "lambd", "sequential" ],
+  "additionalProperties": false,
+  "type": "object",
+  "properties": {
+    "steps": {
+      "description": "Number of gradient steps",
+      "type": "integer",
+      "minimum": 1
+    },
+    "steps_reassign": {
+      "description": "Number of steps until reassignment to real embedding",
+      "type": "integer",
+      "minimum": 1
+    },
+    "num_examples": {
+      "description": "The third parameter",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1
+    },
+    "epsilon": {
+      "description": "Gradient ascent step size",
+      "type": "number",
+      "minimum": 1e-5
+    },
+    "temp": {
+      "description": "Temperature for smoothing logits",
+      "type": "number",
+      "minimum": 1.0
+    },
+    "lambd": {
+      "description": "Weight for clean model loss",
+      "type": "number",
+      "minimum": 0.0
+    },
+    "sequential": {
+      "description": "Update embeddings sequentially instead of concurrently",
+      "type": "boolean"
+    }
+  }
+}
