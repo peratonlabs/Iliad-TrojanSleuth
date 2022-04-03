@@ -3,7 +3,7 @@
   "title": "Algorithm Meta-Parameters",
   "technique": "Embedding Reassignment",
   "technique_description": "Perturb an embedding against the gradient, Every X steps, map it to the token whose embedding is closest in terms of cosine similarity. This token is added to a candidate set. The final candidates are finally evaluated on the model as well as known clean models for comparison.",
-  "technique_changes": "Loss function is a weighted average of model and known clean model.",
+  "technique_changes": "Src-Tgt enumeration for SC task.",
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
   "required": [ "steps", "steps_reassign", "num_examples", "epsilon", "temp", "lambd", "sequential" ],
