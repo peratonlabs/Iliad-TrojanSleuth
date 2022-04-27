@@ -15,8 +15,10 @@ import transformers
 import json
 import jsonschema
 import jsonpickle
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import GridSearchCV
+from sklearn.svm import SVC
 from joblib import dump, load
-from sklearn.linear_model import LogisticRegression
 
 import warnings
 
@@ -30,27 +32,27 @@ def squad2_roberta_qa(device, path):
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"models/id-00000148/model.pt"), map_location=torch.device(device))
-    model2 = torch.load(os.path.join(path,"models/id-00000148/model.pt"), map_location=torch.device(device))
-    model3 = torch.load(os.path.join(path,"models/id-00000206/model.pt"), map_location=torch.device(device))
+    model1 = torch.load(os.path.join(path,"id-00000148/model.pt"), map_location=torch.device(device))
+    model2 = torch.load(os.path.join(path,"id-00000148/model.pt"), map_location=torch.device(device))
+    model3 = torch.load(os.path.join(path,"id-00000206/model.pt"), map_location=torch.device(device))
 
 def squad2_electra_qa(device, path):
     print("electra squad")
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"models/id-00000185/model.pt"), map_location=torch.device(device))
-    model2 = torch.load(os.path.join(path,"models/id-00000191/model.pt"), map_location=torch.device(device))
-    model3 = torch.load(os.path.join(path,"models/id-00000204/model.pt"), map_location=torch.device(device))
+    model1 = torch.load(os.path.join(path,"id-00000185/model.pt"), map_location=torch.device(device))
+    model2 = torch.load(os.path.join(path,"id-00000191/model.pt"), map_location=torch.device(device))
+    model3 = torch.load(os.path.join(path,"id-00000204/model.pt"), map_location=torch.device(device))
 
 def squad2_distil_qa(device, path):
     print("distil squad")
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"models/id-00000149/model.pt"), map_location=torch.device(device))
-    model2 = torch.load(os.path.join(path,"models/id-00000175/model.pt"), map_location=torch.device(device))
-    model3 = torch.load(os.path.join(path,"models/id-00000188/model.pt"), map_location=torch.device(device))
+    model1 = torch.load(os.path.join(path,"id-00000149/model.pt"), map_location=torch.device(device))
+    model2 = torch.load(os.path.join(path,"id-00000175/model.pt"), map_location=torch.device(device))
+    model3 = torch.load(os.path.join(path,"id-00000188/model.pt"), map_location=torch.device(device))
 
 
 
@@ -60,9 +62,9 @@ def roberta_ner(device, path):
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"models/id-00000133/model.pt"), map_location=torch.device(device))
-    model2 = torch.load(os.path.join(path,"models/id-00000197/model.pt"), map_location=torch.device(device))
-    model3 = torch.load(os.path.join(path,"models/id-00000209/model.pt"), map_location=torch.device(device))
+    model1 = torch.load(os.path.join(path,"id-00000133/model.pt"), map_location=torch.device(device))
+    model2 = torch.load(os.path.join(path,"id-00000197/model.pt"), map_location=torch.device(device))
+    model3 = torch.load(os.path.join(path,"id-00000209/model.pt"), map_location=torch.device(device))
 
 
 def electra_ner(device, path):
@@ -70,18 +72,18 @@ def electra_ner(device, path):
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"models/id-00000131/model.pt"), map_location=torch.device(device))
-    model2 = torch.load(os.path.join(path,"models/id-00000189/model.pt"), map_location=torch.device(device))
-    model3 = torch.load(os.path.join(path,"models/id-00000203/model.pt"), map_location=torch.device(device))
+    model1 = torch.load(os.path.join(path,"id-00000131/model.pt"), map_location=torch.device(device))
+    model2 = torch.load(os.path.join(path,"id-00000189/model.pt"), map_location=torch.device(device))
+    model3 = torch.load(os.path.join(path,"id-00000203/model.pt"), map_location=torch.device(device))
 
 def distil_ner(device, path):
     print("distil squad")
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"models/id-00000176/model.pt"), map_location=torch.device(device))
-    model2 = torch.load(os.path.join(path,"models/id-00000176/model.pt"), map_location=torch.device(device))
-    model3 = torch.load(os.path.join(path,"models/id-00000176/model.pt"), map_location=torch.device(device))
+    model1 = torch.load(os.path.join(path,"id-00000176/model.pt"), map_location=torch.device(device))
+    model2 = torch.load(os.path.join(path,"id-00000176/model.pt"), map_location=torch.device(device))
+    model3 = torch.load(os.path.join(path,"id-00000176/model.pt"), map_location=torch.device(device))
 
 
 
@@ -90,9 +92,9 @@ def roberta_sc(device, path):
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"models/id-00000180/model.pt"), map_location=torch.device(device))
-    model2 = torch.load(os.path.join(path,"models/id-00000180/model.pt"), map_location=torch.device(device))
-    model3 = torch.load(os.path.join(path,"models/id-00000208/model.pt"), map_location=torch.device(device))
+    model1 = torch.load(os.path.join(path,"id-00000180/model.pt"), map_location=torch.device(device))
+    model2 = torch.load(os.path.join(path,"id-00000180/model.pt"), map_location=torch.device(device))
+    model3 = torch.load(os.path.join(path,"id-00000208/model.pt"), map_location=torch.device(device))
 
 
 def electra_sc(device, path):
@@ -100,18 +102,18 @@ def electra_sc(device, path):
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"models/id-00000177/model.pt"), map_location=torch.device(device))
-    model2 = torch.load(os.path.join(path,"models/id-00000184/model.pt"), map_location=torch.device(device))
-    model3 = torch.load(os.path.join(path,"models/id-00000194/model.pt"), map_location=torch.device(device))
+    model1 = torch.load(os.path.join(path,"id-00000177/model.pt"), map_location=torch.device(device))
+    model2 = torch.load(os.path.join(path,"id-00000184/model.pt"), map_location=torch.device(device))
+    model3 = torch.load(os.path.join(path,"id-00000194/model.pt"), map_location=torch.device(device))
 
 def distil_sc(device, path):
     print("distil squad")
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"models/id-00000174/model.pt"), map_location=torch.device(device))
-    model2 = torch.load(os.path.join(path,"models/id-00000174/model.pt"), map_location=torch.device(device))
-    model3 = torch.load(os.path.join(path,"models/id-00000195/model.pt"), map_location=torch.device(device))
+    model1 = torch.load(os.path.join(path,"id-00000174/model.pt"), map_location=torch.device(device))
+    model2 = torch.load(os.path.join(path,"id-00000174/model.pt"), map_location=torch.device(device))
+    model3 = torch.load(os.path.join(path,"id-00000195/model.pt"), map_location=torch.device(device))
 
 
 
@@ -252,7 +254,9 @@ def example_trojan_detector(model_filepath,
                             parameters_dirpath,
                             steps,
                             steps_reassign,
-                            num_examples,
+                            training_examples,
+                            validation_examples,
+                            test_examples,
                             epsilon,
                             temp,
                             lambd,
@@ -270,7 +274,7 @@ def example_trojan_detector(model_filepath,
     print('Using parameters_dirpath = {}'.format(parameters_dirpath))
     print('Using steps = {}'.format(str(steps)))
     print('Using steps_reassign = {}'.format(str(steps_reassign)))
-    print('Using num_examples steps = {}'.format(str(num_examples)))
+    print('Using num_examples steps = {}'.format(str(training_examples)))
     print('Using epsilon = {}'.format(str(epsilon)))
     print('Using temp = {}'.format(str(temp)))
     print('Using lambd = {}'.format(str(lambd)))
@@ -285,7 +289,7 @@ def example_trojan_detector(model_filepath,
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     classification_model = torch.load(model_filepath, map_location=torch.device(device))
-    #print(classification_model)
+
     # load the config file to retrieve parameters
     model_dirpath, _ = os.path.split(model_filepath)
     with open(os.path.join(model_dirpath, 'config.json')) as json_file:
@@ -293,22 +297,20 @@ def example_trojan_detector(model_filepath,
 
     examples_filepath = os.path.join(examples_dirpath, "clean-example-data.json")
 
-    dataset = datasets.load_dataset('json', data_files=[examples_filepath], field='data', keep_in_memory=True, split='train', cache_dir=os.path.join(scratch_dirpath, '.cache'))
+    dataset = datasets.load_dataset('json', data_files=[examples_filepath], field='data', keep_in_memory=True, split='train')
     example_data = dataset[0]
 
     if 'question' in example_data:
         features = get_qa_features(device, config, dataset, classification_model, round_training_dataset_dirpath, steps,
-              steps_reassign, num_examples, epsilon, temp, lambd, sequential, tokenizer_filepath)
-        #print(features)
+              steps_reassign, training_examples, validation_examples, test_examples, epsilon, temp, lambd, sequential, tokenizer_filepath)
 
     if 'ner_tags' in example_data:
         features = get_ner_features(device, config, dataset, classification_model, round_training_dataset_dirpath, steps,
-              steps_reassign, num_examples, epsilon, temp, lambd, sequential, tokenizer_filepath)
-        #print(features)
+              steps_reassign, training_examples, validation_examples, test_examples, epsilon, temp, lambd, sequential, tokenizer_filepath)
 
     if 'label' in example_data:
         features = get_sc_features(device, config, dataset, classification_model, round_training_dataset_dirpath, steps,
-              steps_reassign, num_examples, epsilon, temp, lambd, sequential, tokenizer_filepath)
+              steps_reassign, training_examples, validation_examples, test_examples, epsilon, temp, lambd, sequential, tokenizer_filepath)
 
     print("Writing example intermediate features to the csv filepath.")
     if features_filepath is not None:
@@ -318,14 +320,10 @@ def example_trojan_detector(model_filepath,
 
     data = np.array(features)
     classifier = load(parameters_dirpath+"/clf.joblib")
-    probs = classifier.predict_proba(data.reshape(1, -1))
+    scaler = load(parameters_dirpath+"/scaler.joblib")
+    probs = classifier.predict_proba(scaler.transform(data.reshape(1, -1)))
     trojan_probability = probs[0,1]
 
-    # Test scratch space
-    with open(os.path.join(scratch_dirpath, 'test.txt'), 'w') as fh:
-        fh.write('this is a test')
-
-    #trojan_probability = np.random.rand()
     print('Trojan Probability: {}'.format(trojan_probability))
 
     with open(result_filepath, 'w') as fh:
@@ -337,14 +335,17 @@ def configure(output_parameters_dirpath,
               round_training_dataset_dirpath,
               steps,
               steps_reassign,
-              num_examples,
+              training_examples,
+              validation_examples,
+              test_examples,
               epsilon,
               temp,
               lambd,
-              sequential):
+              sequential,
+              start):
     print('Using steps = {}'.format(str(steps)))
     print('Using steps_reassign = {}'.format(str(steps_reassign)))
-    print('Using num_examples steps = {}'.format(str(num_examples)))
+    print('Using num_examples steps = {}'.format(str(training_examples)))
     print('Using epsilon = {}'.format(str(epsilon)))
     print('Using temp = {}'.format(str(temp)))
     print('Using lambd = {}'.format(str(lambd)))
@@ -356,60 +357,42 @@ def configure(output_parameters_dirpath,
 
     os.makedirs(output_parameters_dirpath, exist_ok=True)
 
-
-
-    #arr = np.random.rand(100,100)
-    #np.save(os.path.join(output_parameters_dirpath, 'numpy_array.npy'), arr)
-
-    #with open(os.path.join(output_parameters_dirpath, "single_number.txt"), 'w') as fh:
-    #    fh.write("{}".format(17))
-
-    example_dict = dict()
-    example_dict['keya'] = 2
-
-    #with open(os.path.join(output_parameters_dirpath, "dict.json"), mode='w', encoding='utf-8') as f:
-    #    f.write(jsonpickle.encode(example_dict, warn=True, indent=2))
-
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     features = []
     labels = []
     
     for model in sorted(os.listdir(configure_models_dirpath)):
-        #print(model)
+        print(model)
         # load the classification model and move it to the GPU
         model_filepath = configure_models_dirpath + model + "/model.pt"
         examples_filepath = configure_models_dirpath + model+"/clean-example-data.json"
         classification_model = torch.load(model_filepath, map_location=torch.device(device))
-        #print(classification_model)
+
         # load the config file to retrieve parameters
         model_dirpath, _ = os.path.split(model_filepath)
         with open(os.path.join(model_dirpath, 'config.json')) as json_file:
             config = json.load(json_file)
 
-        dataset = datasets.load_dataset('json', data_files=[examples_filepath], field='data', keep_in_memory=True, split='train', cache_dir=os.path.join(scratch_dirpath, '.cache'))
+        dataset = datasets.load_dataset('json', data_files=[examples_filepath], field='data', keep_in_memory=True, split='train')
         example_data = dataset[0]
         #print(example_data)
-        #try:
+
         if 'question' in example_data:
             features.append(get_qa_features(device, config, dataset, classification_model, round_training_dataset_dirpath, steps,
-            steps_reassign, num_examples, epsilon, temp, lambd, sequential, None))
-            #print(features)
+            steps_reassign, training_examples, validation_examples, test_examples, epsilon, temp, lambd, sequential, None))
 
         if 'ner_tags' in example_data:
             features.append(get_ner_features(device, config, dataset, classification_model, round_training_dataset_dirpath, steps,
-            steps_reassign, num_examples, epsilon, temp, lambd, sequential, None))
-            #print(features)
+            steps_reassign, training_examples, validation_examples, test_examples, epsilon, temp, lambd, sequential, None))
 
         if 'label' in example_data:
             features.append(get_sc_features(device, config, dataset, classification_model, round_training_dataset_dirpath, steps,
-            steps_reassign, num_examples, epsilon, temp, lambd, sequential, None))
-            #features.append([0,0,0,0])
-        #except:
-        #    features.append([0,0,0,0])
+            steps_reassign, training_examples, validation_examples, test_examples, epsilon, temp, lambd, sequential, None))
 
         label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
         labels.append(label)
 
+        #print(features)
         #data = np.concatenate((np.array(features), np.expand_dims(np.array(labels),-1)), axis=1)
         #f = open("rd9.csv", "w")
         #np.savetxt(f, data, delimiter=",")
@@ -420,12 +403,13 @@ def configure(output_parameters_dirpath,
 
     print('Writing configured parameter data to ' + output_parameters_dirpath)
 
-    model = train_model(data)
+    model, scaler = train_model(data)
     dump(model, os.path.join(output_parameters_dirpath, "clf.joblib"))
+    dump(scaler, os.path.join(output_parameters_dirpath, "scaler.joblib"))
 
 
 def get_qa_features(device, config, dataset, classification_model, round_training_dataset_dirpath, steps,
-              steps_reassign, num_examples, epsilon, temp, lambd, sequential, tokenizer_filepath):
+              steps_reassign, training_examples, validation_examples, test_examples, epsilon, temp, lambd, sequential, tokenizer_filepath):
     print("QA Classification")
     model_architecture = config['model_architecture']
     source_dataset = config['source_dataset']
@@ -472,7 +456,9 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
     original_words_dict = dict()
     original_labels_dict = dict()
     exemplars = dict()
-    num_examples = 3
+    training_examples = 3
+    validation_examples = 1
+    test_examples = 2
     loss_min = 1000
     trigger_combo_min = -1
     tgt_min = -1
@@ -490,7 +476,7 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
         #tokens = range(1000,30000)#list(range(15500,16000))+list(range(2000,2500)) #list(range(2000,2500)) + list(range(15500,16000))
 
         embedding_dict_full = get_all_input_id_embeddings({"clean": [model1, model2, model3], "eval": [classification_model]})
-        #print(embedding_dict_full['clean']['avg'].shape)
+        print(embedding_dict_full['clean']['avg'].shape)
         embedding_dict = embedding_dict_full['clean']['avg'][tokens,:]
         max_value = torch.max(embedding_dict)
         min_value = torch.min(embedding_dict)
@@ -499,6 +485,8 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
             
             for trigger_type in trigger_types:
                 for target in targets:
+                    #if trigger_type == "question" or trigger_type == "context" or target == "self":
+                    #    continue
                     
                     batch_num = 0
                     embeddings_cpu = []
@@ -604,7 +592,7 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
                         if target == "cls":
                             labels.append(0)
 
-                        if batch_num >= num_examples: break
+                        if batch_num >= training_examples: break
 
                     models = [model1, model2, model3]
                     class_id = trigger_types.index(trigger_type)
@@ -618,7 +606,8 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
                         #embeddings_cpu, eps, exclusion = perturb_qa(classification_model, added_token_type, embeddings.detach(), device, added_attention, added_start_position, added_end_position, target, trigger_type, question_end, end, num_tokens, step, steps_batch, eps, min_value, max_value, embedding_dict, exclusion, token_ids, tokenizer)
                         embeddings_cpu, epsilon, exclusion = gen_triggers(classification_model, embeddings_cpu, device, insert_locs, num_tokens, step, steps_reassign, epsilon, temp, lambd, sequential, min_value, max_value, embedding_dict, exclusion, tokens, tokenizer, labels, models, qa_loss, class_id, **kwargs)
                         #embeddings = embeddings_cpu
-                    
+                    #print(torch.cuda.memory_summary())
+                    #print(epsilon, exclusion)
 
     tokenized_dataset.set_format()
     
@@ -626,9 +615,10 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
                             'end_positions'])
 
     batch_num = 0
+    #exclusion = [ [[tokenizer("cheap")["input_ids"][1]]]*7 ] *3
     with torch.no_grad() and torch.cuda.amp.autocast():
         for batch_idx, tensor_dict in enumerate(dataloader):
-            if batch_idx < num_examples: continue
+            if batch_idx < training_examples: continue
             
             input_ids = tensor_dict['input_ids'].to(device)[0].tolist()
             attention_mask = tensor_dict['attention_mask'].to(device)
@@ -684,11 +674,18 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
                             added_start_position = start_positions
                             added_end_position = end_positions
                         
+                        #if trigger_type == "question" or trigger_type == "context":
+                        #    added_attention = torch.tensor([attention_mask[:insert_loc[0]] + [1]*num_tokens + attention_mask[insert_loc[0]:-(num_tokens)]]).to(device)
+                        #    if hasattr(classification_model, 'electra') or hasattr(classification_model, 'distilbert'):
+                        #        added_token_type = torch.tensor([token_type_ids[:insert_loc[0]] + [0]*num_tokens + token_type_ids[insert_loc[0]:-(num_tokens)]]).to(device)
 
                         if trigger_type == "both":
                             insert_loc = [question_end+1, end+num_tokens]
                             added_start_position = start_positions + num_tokens
                             added_end_position = end_positions + num_tokens
+                            #added_attention = torch.tensor([attention_mask[:question_end+1] + [1]*num_tokens + attention_mask[question_end+1:end] + [1]*num_tokens + attention_mask[end:-(2*num_tokens)]]).to(device)
+                            #if hasattr(classification_model, 'electra') or hasattr(classification_model, 'distilbert'):
+                            #    added_token_type = torch.tensor([token_type_ids[:question_end+1] + [0]*num_tokens + token_type_ids[question_end+1:end] + [1]*num_tokens + token_type_ids[end:-(2*num_tokens)]]).to(device)
 
                         if trigger_type != "both":
                             triggered_ids = torch.tensor([input_ids[:insert_loc[0]] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[insert_loc[0]:-(num_tokens)]]).to(device)
@@ -734,7 +731,7 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
                     c = trigger_type_i
                 
                     trigger_type = trigger_types[trigger_type_i]
-                    #print(trigger_type)
+                    print(trigger_type)
                     #print(torch.cuda.memory_summary())
 
                     if trigger_type == "question":
@@ -747,12 +744,18 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
                         added_start_position = start_positions
                         added_end_position = end_positions
                     
+                    if trigger_type == "question" or trigger_type == "context":
+                        pass#added_attention = torch.tensor([attention_mask[:insert_loc[0]] + [1]*num_tokens + attention_mask[insert_loc[0]:-(num_tokens)]]).to(device)
+                        #if hasattr(classification_model, 'electra') or hasattr(classification_model, 'distilbert'):
+                        #    added_token_type = torch.tensor([token_type_ids[:insert_loc[0]] + [0]*num_tokens + token_type_ids[insert_loc[0]:-(num_tokens)]]).to(device)
 
                     if trigger_type == "both":
                         insert_loc = [question_end+1, end+num_tokens]
                         added_start_position = start_positions + num_tokens
                         added_end_position = end_positions + num_tokens
-
+                        #added_attention = torch.tensor([attention_mask[:question_end+1] + [1]*num_tokens + attention_mask[question_end+1:end] + [1]*num_tokens + attention_mask[end:-(2*num_tokens)]]).to(device)
+                        #if hasattr(classification_model, 'electra') or hasattr(classification_model, 'distilbert'):
+                        #    added_token_type = torch.tensor([token_type_ids[:question_end+1] + [0]*num_tokens + token_type_ids[question_end+1:end] + [1]*num_tokens + token_type_ids[end:-(2*num_tokens)]]).to(device)
                         
                     if trigger_type != "both":
                         triggered_ids = torch.tensor([input_ids[:insert_loc[0]] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[insert_loc[0]:-(num_tokens)]]).to(device)
@@ -785,7 +788,7 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
                                                     
                     for i, clean_model in enumerate([model1, model2, model3]):
                         with torch.cuda.amp.autocast():
-                            #print(triggered_ids.shape)
+                            print(triggered_ids.shape)
                             logits = clean_model(triggered_ids)
                             start_logits = logits['start_logits']
                             end_logits = logits["end_logits"]
@@ -807,7 +810,7 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
                         else:
                             clean_losses[trigger_type_i] = [total_loss]
                         
-            if batch_num == 3:
+            if batch_num >= validation_examples + test_examples:
                 break
 
     #return [loss_min.item(), clean_means[0].item(), clean_means[1].item(), clean_means[2].item()]
@@ -818,10 +821,10 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
             loss_min = torch.mean(torch.tensor(final_losses[class_id])).item()
             trigger_class = class_id
     #print(loss_min)
-    clean_losses = torch.mean(torch.tensor(clean_losses[trigger_class]).reshape((2,3)), axis=0)
+    clean_losses = torch.mean(torch.tensor(clean_losses[trigger_class]).reshape((test_examples,3)), axis=0)
     #print(clean_losses)
     final_losses = [loss_min] + clean_losses.tolist()
-    #print(final_losses)
+    print(final_losses)
     return final_losses
 
 def tokenize_and_align_labels(tokenizer, original_words, original_labels):
@@ -850,7 +853,7 @@ def tokenize_and_align_labels(tokenizer, original_words, original_labels):
 
 
 def get_ner_features(device, config, dataset, classification_model, round_training_dataset_dirpath, steps,
-              steps_reassign, num_examples, epsilon, temp, lambd, sequential, tokenizer_filepath):
+              steps_reassign, training_examples, validation_examples, test_examples, epsilon, temp, lambd, sequential, tokenizer_filepath):
     print("NER Classification")
     model_architecture = config['model_architecture']
     source_dataset = config['source_dataset']
@@ -896,9 +899,11 @@ def get_ner_features(device, config, dataset, classification_model, round_traini
             exclusion[i][j] = []
     original_words_dict = dict()
     original_labels_dict = dict()
-    names = open("/name_file.txt").read().splitlines()
+    names = open("name_file.txt").read().splitlines()
     exemplars = dict()
-    num_examples = 3
+    training_examples = 3
+    validation_examples = 1
+    test_examples = 2
     loss_min = 1000
     trigger_combo_min = -1
     tgt_min = -1
@@ -921,7 +926,7 @@ def get_ner_features(device, config, dataset, classification_model, round_traini
 
             label = get_class_id(original_labels)
             if label in exemplars:
-                if exemplars[label] >= num_examples+3:
+                if exemplars[label] >= training_examples + validation_examples + test_examples:
                         continue
                 else:
                         exemplars[label] = exemplars[label] + 1
@@ -929,7 +934,7 @@ def get_ner_features(device, config, dataset, classification_model, round_traini
 
             #print(exemplars)
 
-            if exemplars[label] <= num_examples:
+            if exemplars[label] <= training_examples:
                 find_triggers = True
                 if label in original_words_dict:
                     original_words_dict[label].append(original_words)
@@ -940,10 +945,10 @@ def get_ner_features(device, config, dataset, classification_model, round_traini
                 else:
                     original_labels_dict[label] = [original_labels]
 
-            if exemplars[label] == num_examples:
+            if exemplars[label] == training_examples:
                 #print()
                 exclusion = find_trigger(tokenizer, model_architecture, original_words_dict[label], original_labels_dict[label], classification_model, device, label, steps,
-              steps_reassign, num_examples, epsilon, temp, lambd, sequential, names, model1, model2, model3, exclusion)
+              steps_reassign, training_examples, epsilon, temp, lambd, sequential, names, model1, model2, model3, exclusion)
                 #print(fn, trigger)
                 #break
 
@@ -967,7 +972,7 @@ def get_ner_features(device, config, dataset, classification_model, round_traini
                     break
                                         
             #print(exclusion)
-            if exemplars[label] == num_examples + 1:
+            if exemplars[label] == training_examples + 1:
                 loss_min = 1000
                 trigger_combo_min = -1
                 tgt_min = -1
@@ -1006,7 +1011,7 @@ def get_ner_features(device, config, dataset, classification_model, round_traini
                                 #print(loss_min, trigger_combo_min, tgt_min*2+1)
                 #final_losses[0] = [loss_min.detach().numpy().item()]
 
-            if exemplars[label] >= num_examples + 2:
+            if exemplars[label] >= training_examples + 2:
                 [trigger_i, tgt_min] = model_info[class_id]
                 c = class_id
                 triggered_ids = torch.tensor([input_ids[:insert_loc] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[insert_loc:]]).to(device)
@@ -1050,7 +1055,7 @@ def get_ner_features(device, config, dataset, classification_model, round_traini
             loss_min = torch.mean(torch.tensor(final_losses[class_id])).item()
             trigger_class = class_id
     #print(final_losses)
-    clean_losses = torch.mean(torch.tensor(clean_losses[trigger_class]).reshape((2,3)), axis=0)
+    clean_losses = torch.mean(torch.tensor(clean_losses[trigger_class]).reshape((test_examples,3)), axis=0)
     #print(clean_losses)
     final_losses = [loss_min] + clean_losses.tolist()
     #print(final_losses)
@@ -1062,28 +1067,62 @@ def find_trigger(tokenizer, model_architecture, original_words_list, original_la
     #original_words = ["_","London"]
     #original_labels = [0,7]
     insert_locs = []
-
-    input_ids1, attention_mask, labels1, labels_mask = tokenize_and_align_labels(tokenizer, original_words_list[0], original_labels_list[0])
-    input_ids2, attention_mask, labels2, labels_mask = tokenize_and_align_labels(tokenizer, original_words_list[1], original_labels_list[1])
-    input_ids3, attention_mask, labels3, labels_mask = tokenize_and_align_labels(tokenizer, original_words_list[2], original_labels_list[2])
+    input_ids_list = []
+    label_list = []
     
-    for i in range(len(labels1)):
-        #print(labels1, input_ids1)
-        if int(labels1[i]) == class_id:
-            insert_locs.append([i])
-            break
-        
-    for i in range(len(labels2)):
-        if int(labels2[i]) == class_id:
-            insert_locs.append([i])
-            break
-        
-    for i in range(len(labels3)):
-        #print(labels3, input_ids3)
-        if int(labels3[i]) == class_id:
-            insert_locs.append([i])
-            break
+    for i in range(len(original_words_list)):
+        input_ids1, attention_mask, labels1, labels_mask = tokenize_and_align_labels(tokenizer, original_words_list[i], original_labels_list[i])
+        input_ids_list.append(input_ids1)
+        label_list.append(labels1)
 
+    #input_ids1, attention_mask, labels1, labels_mask = tokenize_and_align_labels(tokenizer, original_words_list[0], original_labels_list[0])
+    #input_ids2, attention_mask, labels2, labels_mask = tokenize_and_align_labels(tokenizer, original_words_list[1], original_labels_list[1])
+    #input_ids3, attention_mask, labels3, labels_mask = tokenize_and_align_labels(tokenizer, original_words_list[2], original_labels_list[2])
+    
+    for i in range(len(label_list)):
+        labels = label_list[i]
+        for j in range(len(labels)):
+            #print(labels1, input_ids1)
+            if int(labels[j]) == class_id:
+                insert_locs.append([j])
+                break
+    
+    # for i in range(len(labels1)):
+    #     #print(labels1, input_ids1)
+    #     if int(labels1[i]) == class_id:
+    #         insert_locs.append([i])
+    #         break
+        
+    # for i in range(len(labels2)):
+    #     if int(labels2[i]) == class_id:
+    #         insert_locs.append([i])
+    #         break
+        
+    # for i in range(len(labels3)):
+    #     #print(labels3, input_ids3)
+    #     if int(labels3[i]) == class_id:
+    #         insert_locs.append([i])
+    #         break
+
+    # for i in range(len(labels2)):
+    #     if int(labels2[i]) == class_id:
+    #         if i > insert_loc:
+    #             input_ids2 = input_ids2[:1] + input_ids2[i-insert_loc+1:]
+    #         if i < insert_loc:
+    #             random_tokens = [torch.randint(4,len(tokenizer.vocab)-1,(1,)).item() for _ in range(insert_loc-i)]
+    #             input_ids2 = input_ids2[:1] + random_tokens + input_ids2[1:]
+    #         break
+
+    # for i in range(len(labels3)):
+    #     if int(labels3[i]) == class_id:
+    #         if i > insert_loc:
+    #             input_ids3 = input_ids3[:1] + input_ids3[i-insert_loc+1:]
+    #         if i < insert_loc:
+    #             random_tokens = [torch.randint(4,len(tokenizer.vocab)-1,(1,)).item() for _ in range(insert_loc-i)]
+    #             input_ids3 = input_ids3[:1] + random_tokens + input_ids3[1:]
+    #         break
+
+    #the_index = tokenizer("happy")['input_ids'][1]
 
     num_tokens = 7
     num_runs = 1
@@ -1097,25 +1136,37 @@ def find_trigger(tokenizer, model_architecture, original_words_list, original_la
 
 
     embedding_dict_full = get_all_input_id_embeddings({"clean": [model1, model2, model3], "eval": [classification_model]})
-    #print(embedding_dict_full['clean']['avg'].shape)
+    print(embedding_dict_full['clean']['avg'].shape)
     embedding_dict = embedding_dict_full['clean']['avg'][tokens,:]
     max_value = torch.max(embedding_dict)
     min_value = torch.min(embedding_dict)
 
+    #print(torch.mean(embedding_dict[0]), torch.std(embedding_dict[0]))
+    #print(added_ids[0][question_end+1], added_ids[0][end+1])
+    #print(max_value, min_value)
+    #print(token_ids[:10])
+    #added_ids = torch.tensor([input_ids]).to(device)
+    #added_attention = torch.tensor([attention_mask[:insert_loc] + [1]*num_tokens + attention_mask[insert_loc:]]).to(device)
+    #return [0,0]
+    #the_ids = torch.tensor([input_ids[:insert_loc] +[the_index]+ [the_index]+ [the_index]+ input_ids[insert_loc:]]).to(device)
     random_tokens = [torch.randint(4,len(tokenizer.vocab)-1,(1,)).item() for _ in range(num_tokens)]
     #print(random_tokens)
     #print(len(input_ids3), insert_locs[2])
-    added_ids1 = torch.tensor([input_ids1[:insert_locs[0][0]] + random_tokens + input_ids1[insert_locs[0][0]:]]).to(device)
-    added_ids2 = torch.tensor([input_ids2[:insert_locs[1][0]] + random_tokens + input_ids2[insert_locs[1][0]:]]).to(device)
-    added_ids3 = torch.tensor([input_ids3[:insert_locs[2][0]] + random_tokens + input_ids3[insert_locs[2][0]:]]).to(device)
+    added_id_list = []
+    for i in range(len(input_ids_list)):
+        added_id_list.append(torch.tensor([input_ids_list[i][:insert_locs[i][0]] + random_tokens + input_ids_list[i][insert_locs[i][0]:]]).to(device))
+        
+    #added_ids1 = torch.tensor([input_ids1[:insert_locs[0][0]] + random_tokens + input_ids1[insert_locs[0][0]:]]).to(device)
+    #added_ids2 = torch.tensor([input_ids2[:insert_locs[1][0]] + random_tokens + input_ids2[insert_locs[1][0]:]]).to(device)
+    #added_ids3 = torch.tensor([input_ids3[:insert_locs[2][0]] + random_tokens + input_ids3[insert_locs[2][0]:]]).to(device)
     #print(added_ids1)
     with torch.cuda.amp.autocast():
         if hasattr(classification_model, 'roberta'):
-            embeddings = classification_model.roberta.embeddings(added_ids1).to(device)
+            embeddings = classification_model.roberta.embeddings(added_id_list[0]).to(device)
         if hasattr(classification_model, 'electra'):
-            embeddings = classification_model.electra.embeddings(added_ids1).to(device)
+            embeddings = classification_model.electra.embeddings(added_id_list[0]).to(device)
         if hasattr(classification_model, 'distilbert'):
-            embeddings = classification_model.distilbert.embeddings(added_ids1).to(device)
+            embeddings = classification_model.distilbert.embeddings(added_id_list[0]).to(device)
     logits = classification_model(inputs_embeds = embeddings)['logits']
     num_classes = logits.shape[2]
     #the_insert = torch.unsqueeze(embedding_dict[the_index-tokens[0]], 0)
@@ -1126,18 +1177,25 @@ def find_trigger(tokenizer, model_architecture, original_words_list, original_la
         #print(labels[1], tgt)
         for run in range(num_runs):
             with torch.cuda.amp.autocast():
+                embedding_list = []
                 if hasattr(classification_model, 'roberta'):
-                    embeddings1 = classification_model.roberta.embeddings(added_ids1).cpu()
-                    embeddings2 = classification_model.roberta.embeddings(added_ids2).cpu()
-                    embeddings3 = classification_model.roberta.embeddings(added_ids3).cpu()
+                    for i in range(len(added_id_list)):
+                        embedding_list.append(classification_model.roberta.embeddings(added_id_list[i]).cpu())
+                    #embeddings1 = classification_model.roberta.embeddings(added_ids1).cpu()
+                    #embeddings2 = classification_model.roberta.embeddings(added_ids2).cpu()
+                    #embeddings3 = classification_model.roberta.embeddings(added_ids3).cpu()
                 if hasattr(classification_model, 'electra'):
-                    embeddings1 = classification_model.electra.embeddings(added_ids1).cpu()
-                    embeddings2 = classification_model.electra.embeddings(added_ids2).cpu()
-                    embeddings3 = classification_model.electra.embeddings(added_ids3).cpu()
+                    for i in range(len(added_id_list)):
+                        embedding_list.append(classification_model.electra.embeddings(added_id_list[i]).cpu())
+                    #embeddings1 = classification_model.electra.embeddings(added_ids1).cpu()
+                    #embeddings2 = classification_model.electra.embeddings(added_ids2).cpu()
+                    #embeddings3 = classification_model.electra.embeddings(added_ids3).cpu()
                 if hasattr(classification_model, 'distilbert'):
-                    embeddings1 = classification_model.distilbert.embeddings(added_ids1).cpu()
-                    embeddings2 = classification_model.distilbert.embeddings(added_ids2).cpu()
-                    embeddings3 = classification_model.distilbert.embeddings(added_ids3).cpu()
+                    for i in range(len(added_id_list)):
+                        embedding_list.append(classification_model.distilbert.embeddings(added_id_list[i]).cpu())
+                    #embeddings1 = classification_model.distilbert.embeddings(added_ids1).cpu()
+                    #embeddings2 = classification_model.distilbert.embeddings(added_ids2).cpu()
+                    #embeddings3 = classification_model.distilbert.embeddings(added_ids3).cpu()
                     
             #print(embeddings.shape, embeddings[0,1,100:105])
             #embeddings = torch.nn.Parameter(torch.cat((embeddings[:,:insert_loc,:], the_insert, the_insert, the_insert, embeddings[:,insert_loc:,:]), axis=1), requires_grad=False).detach().cpu()
@@ -1145,10 +1203,11 @@ def find_trigger(tokenizer, model_architecture, original_words_list, original_la
 
             eps = epsilon
             #insert_locs = [insert_loc]
-            embeddings_cpu = [embeddings1.detach(), embeddings2.detach(), embeddings3.detach()]
+            #embeddings_cpu = [embeddings1.detach(), embeddings2.detach(), embeddings3.detach()]
+            embeddings_cpu = [embedding_list[i].detach() for i in range(len(embedding_list))]
             models = [model1, model2, model3]
             kwargs = {"tgt": tgt*2, "names": names}
-            labels = [insert_locs[0][0]+num_tokens, insert_locs[1][0]+num_tokens, insert_locs[2][0]+num_tokens] 
+            labels = [insert_locs[i][0]+num_tokens for i in range(len(insert_locs))] 
 
             for step in range(steps):
                 embeddings_cpu, eps, exclusion = gen_triggers(classification_model, embeddings_cpu, device, insert_locs, num_tokens, step, steps_batch, eps, temp, lambd, sequential, min_value, max_value, embedding_dict, exclusion, tokens, tokenizer, labels, models, multi_class_loss, class_id, **kwargs)
@@ -1157,7 +1216,7 @@ def find_trigger(tokenizer, model_architecture, original_words_list, original_la
 
 
 def get_sc_features(device, config, dataset, classification_model, round_training_dataset_dirpath, steps,
-              steps_reassign, num_examples, epsilon, temp, lambd, sequential, tokenizer_filepath):
+              steps_reassign, training_examples, validation_examples, test_examples, base_epsilon, temp, lambd, sequential, tokenizer_filepath):
     print("Sentiment classification")
     model_architecture = config['model_architecture']
     source_dataset = config['source_dataset']
@@ -1191,10 +1250,30 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
     triggers = dict()
     batch_num = 0
     #triggers10 = []
+    """
+    fn = dataset[1]
+    trigger_ids = tokenizer("This article deals primarily with the character")['input_ids']
+    print(trigger_ids)
+    text = fn['data']
+    label = fn['label']
+    input_ids = tokenizer(text)['input_ids']
+    if len(input_ids) + 2*6 > 512:
+        input_ids = input_ids[:512//2 - 6] + input_ids[-1*(512//2 - 6):]#.tolist()[:500]#.tolist()
+    input_ids = input_ids[:1] + trigger_ids[:] + input_ids[1:-1] + trigger_ids[:] + input_ids[-1:]
+    input_ids = torch.tensor([input_ids]).to(device)
 
+    logits = classification_model(input_ids)['logits']
+    print(logits, label)
+    softmax = torch.nn.Softmax(dim=1)
+    probs = softmax(logits)
+    print(probs)
+    total_loss = -1*torch.log(probs[0,label])
+    print(total_loss)
+    print(1/0)
+    """
     num_tokens = 7
     num_runs = 1
-    num_examples = 3
+    #num_examples = 3
     exemplars = dict()
     original_words_dict = dict()
     model_info = dict()
@@ -1211,18 +1290,38 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
             text = fn['data']
             label = fn['label']
             find_triggers = False
+            # input_ids = tokenizer(text)['input_ids']
+            # random_tokens = [torch.randint(0,len(tokenizer.vocab)-1,(1,)).item() for _ in range(num_tokens)]
+            # if len(input_ids) + 2*num_tokens > 512:
+            #     input_ids = input_ids[:512//2 - num_tokens] + input_ids[-1*(512//2 - num_tokens):]#.tolist()
+            # added_ids = torch.tensor([input_ids[:1] + random_tokens + input_ids[1:-1] + random_tokens + input_ids[-1:]]).to(device)
+            # with torch.cuda.amp.autocast():
+            #     if hasattr(classification_model, 'roberta'): embeddings = classification_model.roberta.embeddings(added_ids).cpu()
+            #     if hasattr(classification_model, 'electra'): embeddings = classification_model.electra.embeddings(added_ids).cpu()
+            #     if hasattr(classification_model, 'distilbert'): embeddings = classification_model.distilbert.embeddings(added_ids).cpu()
+            # with torch.cuda.amp.autocast():
+            #     logits = classification_model(inputs_embeds = embeddings)['logits']#.dropout(output)
+            #     clean_logits = model1(inputs_embeds = embeddings)['logits']
+            # softmax = torch.nn.Softmax(dim=1)
+            # #"""#print(logits)
+            # probs = softmax(logits)
+            # softmax = torch.nn.Softmax(dim=1)
+            # #"""#print(logits)
+            # clean_probs = softmax(clean_logits)
+            # print(label, probs, clean_probs)
+            # continue
             
             if label in exemplars:
-                if exemplars[label] >= num_examples+3:
+                if exemplars[label] >= training_examples + validation_examples + test_examples:
                         continue
                 else:
                         exemplars[label] = exemplars[label] + 1
             if label not in exemplars: exemplars[label] = 1
 
-            #print(exemplars)
+           # print(exemplars)
 
 
-            if exemplars[label] <= num_examples:
+            if exemplars[label] <= training_examples:
                 find_triggers = True
                 if label in original_words_dict:
                     original_words_dict[label].append(text)
@@ -1235,8 +1334,30 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
                     original_labels_dict[label] = [label]
                 """
                 
-            if exemplars[label] == num_examples:
+            if exemplars[label] == training_examples:
+                """
+                #batch_num += 1
+                #id_start = 15500 #6000
+                #id_end = 16500 #7000
+                #steps = 21
+                steps_batch = steps_reassign
+                input_ids = tokenizer(text)['input_ids']
 
+                if len(input_ids) + 2*num_tokens >= 512:
+                    continue
+                #print(len(input_ids) + 2*num_tokens,512//2 - num_tokens, 512//2 + num_tokens)
+                if len(input_ids) + 2*num_tokens > 512:
+                    input_ids = input_ids[:512//2 - num_tokens] + input_ids[-1*(512//2 - num_tokens):]#.tolist()
+                #print(label, len(input_ids), input_ids)
+                #tokens = range(1000,30000)#list(range(15500,16000))+list(range(2000,2500)) #list(range(2000,2500)) + list(range(15500,16000))
+                if len(triggers) == 0:
+                    for i in range(num_tokens):
+                        triggers[i] = []
+
+                embedding_dict = []
+                embedding_dists = []
+                token_ids = []
+                """
                 if hasattr(classification_model, 'roberta'): tokens = range(4,34304)#range(1004, 48186)
                 if hasattr(classification_model, 'electra'): tokens = range(1999, 30522)
                 if hasattr(classification_model, 'distilbert'): tokens = range(1106,28996)#range(1106, 28996)
@@ -1277,16 +1398,33 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
                     #print(embeddings.shape)
                     embeddings.append(embeddings1.detach())
                 
+                """
+                clean_ids = torch.tensor([input_ids]).to(device)
+                #print(added_ids, added_ids.shape)
+                with torch.cuda.amp.autocast():
+                    if hasattr(classification_model, 'roberta'): clean_embeddings = classification_model.roberta.embeddings.word_embeddings(clean_ids).cpu()
+                    if hasattr(classification_model, 'electra'): clean_embeddings = classification_model.electra.embeddings.word_embeddings(clean_ids).cpu()
+                    if hasattr(classification_model, 'distilbert'): clean_embeddings = classification_model.distilbert.embeddings.word_embeddings(clean_ids).cpu()
+                """
 
-                labels = [1-label] * 3
+                labels = [1-label] * training_examples
                 models = [model1, model2, model3]
-                insert_loc = [[1,-1],[1,-1],[1,-1]]
+                insert_loc = []
+                for _ in range(training_examples):
+                    insert_loc.append([1,-1])
                 class_id = label
                 kwargs = {}
+                #print(len(embeddings))
+                epsilon = base_epsilon
 
                 for step in range(steps):
                     embeddings_cpu, epsilon, exclusion = gen_triggers(classification_model, embeddings, device, insert_loc, num_tokens, step, steps_reassign, epsilon, temp, lambd, sequential, min_value, max_value, embedding_dict, exclusion, token_ids, tokenizer, labels, models, binary_loss, class_id, **kwargs)
                     embeddings = embeddings_cpu
+
+                #del embeddings_cpu
+                #del embeddings
+                #torch.cuda.empty_cache()
+                #if batch_num >= num_examples: break
                 
                 
             if find_triggers:
@@ -1315,7 +1453,7 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
                 trigger_type_max = None
                 num_tries = 2000
 
-                if exemplars[label] == num_examples + 1:
+                if exemplars[label] == training_examples + 1:
                     loss_min = 1000
                     trigger_combo_min = -1
                     tgt_min = -1
@@ -1354,7 +1492,7 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
                         #if batch_num >= num_examples: break
                 #print(torch.mean(torch.tensor(losses)),torch.max(torch.tensor(losses)), trigger_i)
 
-                if exemplars[label] >= num_examples + 2:
+                if exemplars[label] >= training_examples + 2:
                     [trigger_i, tgt_min] = model_info[label]
                     c = label
                     triggered_ids = torch.tensor([input_ids[:1] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[1:-1] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[-1:]]).to(device)
@@ -1388,10 +1526,10 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
             loss_min = torch.mean(torch.tensor(final_losses[class_id])).item()
             trigger_class = class_id
     #print(final_losses)
-    clean_losses = torch.mean(torch.tensor(clean_losses[trigger_class]).reshape((2,3)), axis=0)
+    clean_losses = torch.mean(torch.tensor(clean_losses[trigger_class]).reshape((test_examples,3)), axis=0)
     #print(clean_losses)
     final_losses = [loss_min] + clean_losses.tolist()
-    #print(final_losses)
+    print(final_losses)
     return final_losses
 
 
@@ -1409,7 +1547,7 @@ def gen_triggers(classification_model, embeddings_cpu, device, insert_loc, num_t
                         logits = classification_model(inputs_embeds = embeddings)
                         start_logits = logits['start_logits']
                         end_logits = logits["end_logits"]
-                        clean_logits = models[embeddings_i](inputs_embeds = embeddings)
+                        clean_logits = models[embeddings_i%len(models)](inputs_embeds = embeddings)
                         clean_start_logits = clean_logits['start_logits']
                         clean_end_logits = clean_logits["end_logits"]
                     probs = softmax(start_logits)
@@ -1422,7 +1560,7 @@ def gen_triggers(classification_model, embeddings_cpu, device, insert_loc, num_t
                 else:
                     with torch.cuda.amp.autocast():
                         logits = classification_model(inputs_embeds = embeddings)['logits']#.dropout(output)
-                        clean_logits = models[embeddings_i](inputs_embeds = embeddings)['logits']
+                        clean_logits = models[embeddings_i%len(models)](inputs_embeds = embeddings)['logits']
                     #"""#print(logits)
                     probs = softmax(logits)
                     clean_probs = softmax(clean_logits)
@@ -1488,6 +1626,7 @@ def gen_triggers(classification_model, embeddings_cpu, device, insert_loc, num_t
             
 
             if step > 0 and step%steps_batch == 0:
+                eps = eps/2
                 for word in range(num_tokens):
                     #dists = dict()
                     #print(embeddings_cpu1.shape, insert_loc[0][0])
@@ -1576,10 +1715,13 @@ def train_model(data):
     X = data[:,:-1].astype(np.float32)
     y = data[:,-1]
 
-    clf_lr = LogisticRegression()
-    clf = clf_lr.fit(X, y)
+    parameters = {'gamma':[0.01, 0.1], 'C':[1, 10]}
+    clf_svm = SVC(probability=True, kernel='rbf')
+    clf_svm = GridSearchCV(clf_svm, parameters)
+    sc = StandardScaler()
+    clf = clf_svm.fit(sc.fit_transform(X), y)
 
-    return clf
+    return clf, sc
 
 def get_class_id(labels):
     for label in labels:
@@ -1635,11 +1777,14 @@ if __name__ == "__main__":
     # these parameters need to be defined here, but their values will be loaded from the json file instead of the command line
     parser.add_argument('--steps', type=int, help='Number of gradient steps.')
     parser.add_argument('--steps_reassign', type=int, help='Number of steps until reassignment to real embedding.')
-    parser.add_argument('--num_examples', type=int, help='An example tunable parameter.')
     parser.add_argument('--epsilon', type=float, help='Gradient ascent step size.')
     parser.add_argument('--temp', type=float, help='Temperature for smoothing logits.')
     parser.add_argument('--lambd', type=float, help='Weight for clean model loss.')
     parser.add_argument('--sequential', type=bool, help='Update embeddings sequentially.')
+    parser.add_argument('--start', type=int, default=0)
+    parser.add_argument('--training_examples', type=int, default=3)
+    parser.add_argument('--validation_examples', type=int, default=1)
+    parser.add_argument('--test_examples', type=int, default=2)
 
     args = parser.parse_args()
 
@@ -1655,13 +1800,15 @@ if __name__ == "__main__":
             # this throws a fairly descriptive error if validation fails
             jsonschema.validate(instance=config_json, schema=schema_json)
 
-            args.num_examples = config_json['num_examples']
             args.steps = config_json['steps']
             args.steps_reassign = config_json['steps_reassign']
             args.epsilon = config_json['epsilon']
             args.temp = config_json['temp']
             args.lambd = config_json['lambd']
             args.sequential = config_json['sequential']
+            args.training_examples = config_json['training_examples']
+            #args.validation_examples = config_json['validation_examples']
+            args.test_examples = config_json['test_examples']
 
     if not args.configure_mode:
         if (args.model_filepath is not None and
@@ -1673,7 +1820,9 @@ if __name__ == "__main__":
                 args.learned_parameters_dirpath is not None and
                 args.steps is not None and
                 args.steps_reassign is not None and
-                args.num_examples is not None and
+                args.training_examples is not None and
+                args.validation_examples is not None and
+                args.test_examples is not None and
                 args.epsilon is not None and
                 args.temp is not None and
                 args.lambd is not None and
@@ -1688,7 +1837,9 @@ if __name__ == "__main__":
                                     args.learned_parameters_dirpath,
                                     args.steps,
                                     args.steps_reassign,
-                                    args.num_examples,
+                                    args.training_examples,
+                                    args.validation_examples,
+                                    args.test_examples,
                                     args.epsilon,
                                     args.temp,
                                     args.lambd, 
@@ -1705,7 +1856,9 @@ if __name__ == "__main__":
                 args.temp is not None and
                 args.lambd is not None and
                 args.sequential is not None and
-                args.num_examples is not None):
+                args.training_examples is not None and
+                args.validation_examples is not None and
+                args.test_examples is not None):
 
             # all 3 example parameters will be loaded here, but we only use parameter3
             configure(args.learned_parameters_dirpath,
@@ -1713,10 +1866,13 @@ if __name__ == "__main__":
                       args.round_training_dataset_dirpath,
                       args.steps,
                       args.steps_reassign,
-                      args.num_examples,
+                      args.training_examples,
+                      args.validation_examples,
+                      args.test_examples,
                       args.epsilon,
                       args.temp,
                       args.lambd, 
-                      args.sequential)
+                      args.sequential,
+                      args.start)
         else:
             print("Required Configure-Mode parameters missing!")

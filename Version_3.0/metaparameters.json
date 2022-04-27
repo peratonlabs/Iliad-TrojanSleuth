@@ -1,9 +1,10 @@
 {
-  "steps": 181,
+  "steps": 121,
   "steps_reassign": 60,
-  "num_examples": 1,
-  "epsilon": 0.05,
+  "epsilon": 0.06,
   "temp": 1.0,
   "lambd": 0.08,
-  "sequential": false
+  "sequential": false,
+  "training_examples": 10,
+  "test_examples": 5
 }
