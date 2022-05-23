@@ -21,7 +21,7 @@ from sklearn.svm import SVC
 from joblib import dump, load
 
 import warnings
-
+import time
 import utils_qa
 
 warnings.filterwarnings("ignore")
@@ -274,7 +274,8 @@ def example_trojan_detector(model_filepath,
     print('Using parameters_dirpath = {}'.format(parameters_dirpath))
     print('Using steps = {}'.format(str(steps)))
     print('Using steps_reassign = {}'.format(str(steps_reassign)))
-    print('Using num_examples steps = {}'.format(str(training_examples)))
+    print('Using number of training examples = {}'.format(str(training_examples)))
+    print('Using number of test examples = {}'.format(str(test_examples)))
     print('Using epsilon = {}'.format(str(epsilon)))
     print('Using temp = {}'.format(str(temp)))
     print('Using lambd = {}'.format(str(lambd)))
@@ -323,6 +324,12 @@ def example_trojan_detector(model_filepath,
     scaler = load(parameters_dirpath+"/scaler.joblib")
     probs = classifier.predict_proba(scaler.transform(data.reshape(1, -1)))
     trojan_probability = probs[0,1]
+    
+    if 'question' in example_data:
+        if data[0] == np.min(data) and data[0] < 1:
+            trojan_probability = 0.6
+        else:
+            trojan_probability = 0.5
 
     print('Trojan Probability: {}'.format(trojan_probability))
 
@@ -345,7 +352,8 @@ def configure(output_parameters_dirpath,
               start):
     print('Using steps = {}'.format(str(steps)))
     print('Using steps_reassign = {}'.format(str(steps_reassign)))
-    print('Using num_examples steps = {}'.format(str(training_examples)))
+    print('Using number of training examples = {}'.format(str(training_examples)))
+    print('Using number of test examples = {}'.format(str(test_examples)))
     print('Using epsilon = {}'.format(str(epsilon)))
     print('Using temp = {}'.format(str(temp)))
     print('Using lambd = {}'.format(str(lambd)))
@@ -361,7 +369,7 @@ def configure(output_parameters_dirpath,
     features = []
     labels = []
     
-    for model in sorted(os.listdir(configure_models_dirpath)):
+    for model in sorted(os.listdir(configure_models_dirpath))[start:]:
         print(model)
         # load the classification model and move it to the GPU
         model_filepath = configure_models_dirpath + model + "/model.pt"
@@ -458,7 +466,7 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
     exemplars = dict()
     training_examples = 3
     validation_examples = 1
-    test_examples = 2
+    #test_examples = 2
     loss_min = 1000
     trigger_combo_min = -1
     tgt_min = -1
@@ -468,8 +476,9 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
     #triggers10 = []
     if tokenizer != None:
         
-        trigger_types = ["question", "context", "both"]
+        trigger_types = ["both"]#["question", "context", "both"]
         targets = ["self", "cls"]
+        spatial = ["beginning","end"]
         if hasattr(classification_model, 'roberta'): tokens = range(4,34304)#range(1004, 48186)
         if hasattr(classification_model, 'electra'): tokens = range(1999, 30522)
         if hasattr(classification_model, 'distilbert'): tokens = range(1106,28996)#range(1106, 28996)
@@ -477,137 +486,174 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
 
         embedding_dict_full = get_all_input_id_embeddings({"clean": [model1, model2, model3], "eval": [classification_model]})
         print(embedding_dict_full['clean']['avg'].shape)
-        embedding_dict = embedding_dict_full['clean']['avg'][tokens,:]
-        max_value = torch.max(embedding_dict)
-        min_value = torch.min(embedding_dict)
-        
+        embedding_dict = embedding_dict_full['clean']['avg'][tokens,:].detach().numpy()
+        norms = []
+        for dict_i in range(embedding_dict.shape[0]):
+            dict_embedding = embedding_dict[dict_i]
+            norms.append(np.linalg.norm(dict_embedding))
+        max_value = np.max(embedding_dict)
+        min_value = np.min(embedding_dict)
+
         for run in range(num_runs):
             
             for trigger_type in trigger_types:
                 for target in targets:
-                    #if trigger_type == "question" or trigger_type == "context" or target == "self":
-                    #    continue
-                    
-                    batch_num = 0
-                    embeddings_cpu = []
-                    attentions = []
-                    token_types = []
-                    start_position_list = []
-                    end_position_list = []
-                    labels = []
-                    insert_locs = []
+                    for place in spatial:
+                        #if trigger_type == "question" and target == "self": #or trigger_type == "context" or target == "self":
+                        #    continue
+                        
+                        batch_num = 0
+                        embeddings_cpu = []
+                        attentions = []
+                        token_types = []
+                        start_position_list = []
+                        end_position_list = []
+                        labels = []
+                        insert_locs = []
                             
-                    for batch_idx, tensor_dict in enumerate(dataloader):
-                        input_ids = tensor_dict['input_ids'].to(device)[0].tolist()
-                        attention_mask = tensor_dict['attention_mask'].to(device)[0].tolist()
-                        token_type_ids = tensor_dict['token_type_ids'].to(device)[0].tolist()
-                        start_positions = tensor_dict['start_positions'].to(device)
-                        end_positions = tensor_dict['end_positions'].to(device)
-                        #print(input_ids, attention_mask, token_type_ids)
-                        #print(1/0)
+                        for batch_idx, tensor_dict in enumerate(dataloader):
+                            input_ids = tensor_dict['input_ids'].to(device)[0].tolist()
+                            attention_mask = tensor_dict['attention_mask'].to(device)[0].tolist()
+                            token_type_ids = tensor_dict['token_type_ids'].to(device)[0].tolist()
+                            start_positions = tensor_dict['start_positions'].to(device)
+                            end_positions = tensor_dict['end_positions'].to(device)
+                            #print(input_ids, attention_mask, token_type_ids)
+                            #print(1/0)
+                            
+                        
+                            if start_positions == 0: continue
 
-                        if start_positions == 0: continue
+                            if place == "beginning":
+                                question_end = 0
+                                end = input_ids.index(eos_indicator) + 1
+                            
+                            if place == "end":
+                                if question_indicator in input_ids:
+                                    question_end = input_ids.index(question_indicator)
+                                if question_indicator not in input_ids:
+                                    question_end = input_ids.index(eos_indicator) - 1
 
-                        if question_indicator in input_ids:
+                                if end_indicator in input_ids:
+                                    end = input_ids.index(end_indicator) - 1
+                                    if end >= 372:
+                                        continue
+                                    #end = end
+                                if end_indicator not in input_ids:
+                                    continue
+
+
+                            """
                             question_end = input_ids.index(question_indicator)
-                        if question_indicator not in input_ids:
-                            question_end = input_ids.index(eos_indicator) - 1
+                            end = input_ids.index(eos_indicator) + 1
+                            end2 = input_ids.index(end_indicator) - 1
+                            insert_loc = [question_end,end2]
+                            trigger_ids = tokenizer("nearly")['input_ids'][1:-1]
+                            print(trigger_ids)
+                            num_tokens = len(trigger_ids)
+                            #print(trigger_ids ,tokenizer.decode(trigger_ids), [tokenizer.decode(trigger_ids[i]) for i in range(len(trigger_ids))])
+                            #input_ids = input_ids[:insert_loc[-1]] + trigger_ids[:] + input_ids[insert_loc[-1]:]#insert_loc[-1]]  + trigger_ids[:] + input_ids[insert_loc[-1]:]
+                            input_ids = input_ids[:insert_loc[0]] + trigger_ids[:] + input_ids[insert_loc[0]:insert_loc[1]] + trigger_ids[:] + input_ids[insert_loc[1]:]#insert_loc[-1]]  + trigger_ids[:] + input_ids[insert_loc[-1]:]
+                            print(input_ids)
+                            input_ids = torch.tensor([input_ids]).to(device)
+                            #print(1/0)
+                            logits = classification_model(input_ids)
+                            start_logits = logits['start_logits']
+                            end_logits = logits["end_logits"]
+                            softmax = torch.nn.Softmax(dim=1)
+                            start_probs = softmax(start_logits)
+                            end_probs = softmax(end_logits)
+                            index = 0#insert_loc[0] + num_tokens
+                            start_loss = -1*torch.log(start_probs[0,index])
+                            end_loss = -1*torch.log(end_probs[0,index])#+2-1])
+                            total_loss = (start_loss + end_loss) / 2
+                            print(total_loss)
+                            print(1/0)
+                            """
 
-                        if end_indicator in input_ids:
-                            end = input_ids.index(end_indicator) - 1
-                            if end >= 372:
-                                continue
-                            #end = end
-                        if end_indicator not in input_ids:
-                            continue
+                            batch_num += 1
 
-                        batch_num += 1
-                        insert_loc = question_end
-                        #id_start = 15500 #6000
-                        #id_end = 16500 #7000
-                        #steps = 21
-
-                        added_ids = input_ids
-                        added_token_type = torch.tensor([token_type_ids]).to(device)
-                        #return [0,0]
+                            added_ids = input_ids
+                            added_token_type = torch.tensor([token_type_ids]).to(device)
+                            #return [0,0]
 
 
-                        if trigger_type == "question":
-                            insert_loc = [question_end+1]
-                            added_start_position = start_positions + num_tokens
-                            added_end_position = end_positions + num_tokens
-                            
-
-                        if trigger_type == "context":
-                            insert_loc = [end]
-                            added_start_position = start_positions
-                            added_end_position = end_positions
-                        
-                        if trigger_type == "question" or trigger_type == "context":
-                            added_attention = torch.tensor([attention_mask[:insert_loc[0]] + [1]*num_tokens + attention_mask[insert_loc[0]:-(num_tokens)]]).to(device)
-                            if hasattr(classification_model, 'electra') or hasattr(classification_model, 'distilbert'):
-                                added_token_type = torch.tensor([token_type_ids[:insert_loc[0]] + [0]*num_tokens + token_type_ids[insert_loc[0]:-(num_tokens)]]).to(device)
-
-                        if trigger_type == "both":
-                            insert_loc = [question_end+1, end+num_tokens]
-                            added_start_position = start_positions + num_tokens
-                            added_end_position = end_positions + num_tokens
-                            added_attention = torch.tensor([attention_mask[:question_end+1] + [1]*num_tokens + attention_mask[question_end+1:end] + [1]*num_tokens + attention_mask[end:-(2*num_tokens)]]).to(device)
-                            if hasattr(classification_model, 'electra') or hasattr(classification_model, 'distilbert'):
-                                added_token_type = torch.tensor([token_type_ids[:question_end+1] + [0]*num_tokens + token_type_ids[question_end+1:end] + [1]*num_tokens + token_type_ids[end:-(2*num_tokens)]]).to(device)
-                            
-                        
-                        random_tokens = [torch.randint(4,len(tokenizer.vocab)-1,(1,)).item() for _ in range(num_tokens)]
-                        
-                        if trigger_type == "question":
-                            added_ids = torch.tensor([added_ids[:question_end+1] + random_tokens + added_ids[question_end+1:-(num_tokens)]]).to(device)
-
-                        if trigger_type == "context":
-                            added_ids = torch.tensor([added_ids[:end] + random_tokens + added_ids[end:-(num_tokens)]]).to(device) 
-                        
-                        if trigger_type == "both":
-                            added_ids = torch.tensor([added_ids[:question_end+1] + random_tokens + added_ids[question_end+1:end] + random_tokens + added_ids[end:-(2*num_tokens)]]).to(device)
-
-                        with torch.cuda.amp.autocast():
-                            if hasattr(classification_model, 'roberta'):
-                                embeddings1 = classification_model.roberta.embeddings(added_ids).cpu().detach()
-                            if hasattr(classification_model, 'electra'):
-                                embeddings1 = classification_model.electra.embeddings(added_ids).cpu().detach()
-                            if hasattr(classification_model, 'distilbert'):
-                                embeddings1 = classification_model.distilbert.embeddings(added_ids).cpu().detach()
-
-                        embeddings_cpu.append(embeddings1)
-                        attentions.append(added_attention)
-                        token_types.append(added_token_type)
-                        start_position_list.append(added_start_position)
-                        end_position_list.append(added_end_position)
-                        insert_locs.append(insert_loc)
-                        if target == "self":
                             if trigger_type == "question":
-                                labels.append(question_end+1)
+                                insert_loc = [question_end+1]
+                                added_start_position = start_positions + num_tokens
+                                added_end_position = end_positions + num_tokens
+                                
+
                             if trigger_type == "context":
-                                labels.append(end)
+                                insert_loc = [end]
+                                added_start_position = start_positions
+                                added_end_position = end_positions
+                            
+                            if trigger_type == "question" or trigger_type == "context":
+                                added_attention = torch.tensor([attention_mask[:insert_loc[0]] + [1]*num_tokens + attention_mask[insert_loc[0]:-(num_tokens)]]).to(device)
+                                if hasattr(classification_model, 'electra') or hasattr(classification_model, 'distilbert'):
+                                    added_token_type = torch.tensor([token_type_ids[:insert_loc[0]] + [0]*num_tokens + token_type_ids[insert_loc[0]:-(num_tokens)]]).to(device)
+
                             if trigger_type == "both":
-                                labels.append(end+num_tokens)
+                                insert_loc = [question_end+1, end+num_tokens]
+                                added_start_position = start_positions + num_tokens
+                                added_end_position = end_positions + num_tokens
+                                added_attention = torch.tensor([attention_mask[:question_end+1] + [1]*num_tokens + attention_mask[question_end+1:end] + [1]*num_tokens + attention_mask[end:-(2*num_tokens)]]).to(device)
+                                if hasattr(classification_model, 'electra') or hasattr(classification_model, 'distilbert'):
+                                    added_token_type = torch.tensor([token_type_ids[:question_end+1] + [0]*num_tokens + token_type_ids[question_end+1:end] + [1]*num_tokens + token_type_ids[end:-(2*num_tokens)]]).to(device)
+                                
+                            random_tokens = [torch.randint(4,len(tokenizer.vocab)-1,(1,)).item() for _ in range(num_tokens)]
+                            
+                            if trigger_type == "question":
+                                added_ids = torch.tensor([added_ids[:question_end+1] + random_tokens + added_ids[question_end+1:-(num_tokens)]]).to(device)
+
+                            if trigger_type == "context":
+                                added_ids = torch.tensor([added_ids[:end] + random_tokens + added_ids[end:-(num_tokens)]]).to(device) 
+                            
+                            if trigger_type == "both":
+                                added_ids = torch.tensor([added_ids[:question_end+1] + random_tokens + added_ids[question_end+1:end] + random_tokens + added_ids[end:-(2*num_tokens)]]).to(device)
+
+                            with torch.cuda.amp.autocast():
+                                if hasattr(classification_model, 'roberta'):
+                                    embeddings1 = classification_model.roberta.embeddings(added_ids).cpu().detach()
+                                if hasattr(classification_model, 'electra'):
+                                    embeddings1 = classification_model.electra.embeddings(added_ids).cpu().detach()
+                                if hasattr(classification_model, 'distilbert'):
+                                    embeddings1 = classification_model.distilbert.embeddings(added_ids).cpu().detach()
+
+                            embeddings_cpu.append(embeddings1)
+                            attentions.append(added_attention)
+                            token_types.append(added_token_type)
+                            start_position_list.append(added_start_position)
+                            end_position_list.append(added_end_position)
+                            insert_locs.append(insert_loc)
+                            if target == "self":
+                                if trigger_type == "question":
+                                    labels.append(question_end+1)
+                                if trigger_type == "context":
+                                    labels.append(end)
+                                if trigger_type == "both":
+                                    labels.append(end+num_tokens)
+                            if target == "cls":
+                                labels.append(0)
+
+                            if batch_num >= training_examples: break
+
+                        models = [model1, model2, model3]
+                        class_id = trigger_types.index(trigger_type)
+                        kwargs = {"tgt": target}
+                        if target == "self":
+                            kwargs["end_logits_index"] = num_tokens-1
                         if target == "cls":
-                            labels.append(0)
-
-                        if batch_num >= training_examples: break
-
-                    models = [model1, model2, model3]
-                    class_id = trigger_types.index(trigger_type)
-                    kwargs = {"tgt": target}
-                    if target == "self":
-                        kwargs["end_logits_index"] = num_tokens-1
-                    if target == "cls":
-                        kwargs["end_logits_index"] = 0
-                    for step in range(steps):
-                        
-                        #embeddings_cpu, eps, exclusion = perturb_qa(classification_model, added_token_type, embeddings.detach(), device, added_attention, added_start_position, added_end_position, target, trigger_type, question_end, end, num_tokens, step, steps_batch, eps, min_value, max_value, embedding_dict, exclusion, token_ids, tokenizer)
-                        embeddings_cpu, epsilon, exclusion = gen_triggers(classification_model, embeddings_cpu, device, insert_locs, num_tokens, step, steps_reassign, epsilon, temp, lambd, sequential, min_value, max_value, embedding_dict, exclusion, tokens, tokenizer, labels, models, qa_loss, class_id, **kwargs)
-                        #embeddings = embeddings_cpu
-                    #print(torch.cuda.memory_summary())
-                    #print(epsilon, exclusion)
+                            kwargs["end_logits_index"] = 0
+                        improvs = [0]*num_tokens
+                        prev_i = 0
+                        prev_loss = 100
+                        print(target, trigger_type, place)
+                        for step in range(steps):
+                            
+                            #embeddings_cpu, eps, exclusion = perturb_qa(classification_model, added_token_type, embeddings.detach(), device, added_attention, added_start_position, added_end_position, target, trigger_type, question_end, end, num_tokens, step, steps_batch, eps, min_value, max_value, embedding_dict, exclusion, token_ids, tokenizer)
+                            embeddings_cpu, epsilon, exclusion, prev_i, prev_loss = gen_triggers(classification_model, embeddings_cpu, device, insert_locs, num_tokens, step, steps_reassign, epsilon, temp, lambd, sequential, min_value, max_value, embedding_dict, norms, exclusion, tokens, tokenizer, labels, models, qa_loss, class_id, improvs, prev_i, prev_loss, **kwargs)
+                            #embeddings = embeddings_cpu
 
     tokenized_dataset.set_format()
     
@@ -628,18 +674,6 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
 
             if start_positions == 0: continue
             
-            if end_indicator in input_ids:
-                end = input_ids.index(end_indicator) - 1
-                if end >= 372:
-                    continue 
-            if end_indicator not in input_ids:
-                continue
-                end = len(input_ids)-1
-            if question_indicator in input_ids:
-                question_end = input_ids.index(question_indicator)
-            if question_indicator not in input_ids:
-                question_end = input_ids.index(eos_indicator)
-            
             batch_num += 1
 
             loss_min = 100
@@ -648,87 +682,121 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
             num_tries = 2000
             #print(batch_num)
             if batch_num == 1:
-                loss_min = 1000
-                trigger_combo_min = -1
-                tgt_min = -1
                 for trigger_type_i in range(len(trigger_types)):
-                    for search in range(len(exclusion[trigger_type_i][0])):#(num_tries):
-                        trigger_i = search#%trigger_len#np.random.randint(trigger_len, size=1).item()
-
-                        all_preds = None
-                        losses=[]
-                        total_loss = 0
-
-                        #print(end_indicator, end)
-                        #print(input_ids.shape, input_ids[:,:1].shape, input_ids[:,1:-1].shape, torch.tensor([[2992,25750,15942,22897,13683,10109]]).shape, input_ids[:,-1:].shape)
-                        c = trigger_type_i
-                        trigger_type = trigger_types[trigger_type_i]
-                        if trigger_type == "question":
-                            insert_loc = [question_end+1]
-                            added_start_position = start_positions + num_tokens
-                            added_end_position = end_positions + num_tokens
-                            
-
-                        if trigger_type == "context":
-                            insert_loc = [end]
-                            added_start_position = start_positions
-                            added_end_position = end_positions
+                    loss_min = 1000
+                    trigger_combo_min = -1
+                    tgt_min = -1
+                    place_min = 0
+                    for place in ["beginning","end"]:
+                        if place == "beginning":
+                            question_end = 0
+                            end = input_ids.index(eos_indicator) + 1
                         
-                        #if trigger_type == "question" or trigger_type == "context":
-                        #    added_attention = torch.tensor([attention_mask[:insert_loc[0]] + [1]*num_tokens + attention_mask[insert_loc[0]:-(num_tokens)]]).to(device)
-                        #    if hasattr(classification_model, 'electra') or hasattr(classification_model, 'distilbert'):
-                        #        added_token_type = torch.tensor([token_type_ids[:insert_loc[0]] + [0]*num_tokens + token_type_ids[insert_loc[0]:-(num_tokens)]]).to(device)
+                        if place == "end":
+                            if question_indicator in input_ids:
+                                question_end = input_ids.index(question_indicator)
+                            if question_indicator not in input_ids:
+                                question_end = input_ids.index(eos_indicator) - 1
 
-                        if trigger_type == "both":
-                            insert_loc = [question_end+1, end+num_tokens]
-                            added_start_position = start_positions + num_tokens
-                            added_end_position = end_positions + num_tokens
-                            #added_attention = torch.tensor([attention_mask[:question_end+1] + [1]*num_tokens + attention_mask[question_end+1:end] + [1]*num_tokens + attention_mask[end:-(2*num_tokens)]]).to(device)
-                            #if hasattr(classification_model, 'electra') or hasattr(classification_model, 'distilbert'):
-                            #    added_token_type = torch.tensor([token_type_ids[:question_end+1] + [0]*num_tokens + token_type_ids[question_end+1:end] + [1]*num_tokens + token_type_ids[end:-(2*num_tokens)]]).to(device)
+                            if end_indicator in input_ids:
+                                end = input_ids.index(end_indicator) - 1
+                                if end >= 372:
+                                    continue
+                                #end = end
+                            if end_indicator not in input_ids:
+                                continue
+                        for search in range(len(exclusion[trigger_type_i][0])):#(num_tries):
+                            trigger_i = search#%trigger_len#np.random.randint(trigger_len, size=1).item()
 
-                        if trigger_type != "both":
-                            triggered_ids = torch.tensor([input_ids[:insert_loc[0]] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[insert_loc[0]:-(num_tokens)]]).to(device)
-                        if trigger_type == "both":
-                            triggered_ids = torch.tensor([input_ids[:insert_loc[0]] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[insert_loc[0]:insert_loc[1]-num_tokens] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[insert_loc[1]-num_tokens:-2*(num_tokens)]]).to(device)
+                            all_preds = None
+                            losses=[]
+                            total_loss = 0
 
-                        #print(trigger_i, triggered_ids)
-                        #logits = classification_model(input_ids=torch.tensor([input_ids[:1]+ [2992,25750,15942,22897,13683,10109] + input_ids[1:-1] + [2992,25750,15942,22897,13683,10109] + 
-                        #input_ids[-1:]]).to(device))['logits']
-                        softmax = torch.nn.Softmax(dim=1)
-                        with torch.cuda.amp.autocast():
-                            logits = classification_model(triggered_ids)
-                            start_logits = logits['start_logits']
-                            end_logits = logits["end_logits"]
-                        start_probs = softmax(start_logits)
-                        end_probs = softmax(end_logits)
-                        for tgt in targets:
-                            if tgt == "self":
-                                index = insert_loc[-1]
-                                start_loss = -1*torch.log(start_probs[0,index])
-                                end_loss = -1*torch.log(end_probs[0,index+num_tokens-1])
-                                total_loss = (start_loss + end_loss) / 2
-                            if tgt == "cls":
-                                index = 0
-                                start_loss = -1*torch.log(start_probs[0,index])
-                                end_loss = -1*torch.log(end_probs[0,index])
-                                total_loss = (start_loss + end_loss) / 2
-                            total_loss = total_loss.detach()
-                            #print(total_loss)
-                            if total_loss < loss_min:
-                                loss_min = total_loss
-                                trigger_combo_min = trigger_i#[trigger_i, trigger_i2, trigger_i3, trigger_i4, trigger_i5, trigger_i6]
-                                tgt_min = tgt
-                    model_info[trigger_type_i] = [trigger_combo_min, tgt_min]
-                            #print(loss_min, trigger_combo_min)
+                            c = trigger_type_i
+                            trigger_type = trigger_types[trigger_type_i]
+                            if trigger_type == "question":
+                                insert_loc = [question_end+1]
+                                added_start_position = start_positions + num_tokens
+                                added_end_position = end_positions + num_tokens
+                                
+
+                            if trigger_type == "context":
+                                insert_loc = [end]
+                                added_start_position = start_positions
+                                added_end_position = end_positions
+                            
+                            if trigger_type == "both":
+                                insert_loc = [question_end+1, end+num_tokens]
+                                added_start_position = start_positions + num_tokens
+                                added_end_position = end_positions + num_tokens
+
+                            if trigger_type != "both":
+                                triggered_ids = torch.tensor([input_ids[:insert_loc[0]] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[insert_loc[0]:-(num_tokens)]]).to(device)
+                            if trigger_type == "both":
+                                triggered_ids = torch.tensor([input_ids[:insert_loc[0]] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[insert_loc[0]:insert_loc[1]-num_tokens] + [exclusion[c][0][trigger_i]] + [exclusion[c][1][trigger_i]] + [exclusion[c][2][trigger_i]] + [exclusion[c][3][trigger_i]] + [exclusion[c][4][trigger_i]] + [exclusion[c][5][trigger_i]] + [exclusion[c][6][trigger_i]] + input_ids[insert_loc[1]-num_tokens:-2*(num_tokens)]]).to(device)
+
+                            #print(trigger_i, triggered_ids)
+                            #logits = classification_model(input_ids=torch.tensor([input_ids[:1]+ [2992,25750,15942,22897,13683,10109] + input_ids[1:-1] + [2992,25750,15942,22897,13683,10109] + 
+                            #input_ids[-1:]]).to(device))['logits']
+                            softmax = torch.nn.Softmax(dim=1)
+                            with torch.cuda.amp.autocast():
+                                logits = classification_model(triggered_ids)
+                                start_logits = logits['start_logits']
+                                end_logits = logits["end_logits"]
+                            start_probs = softmax(start_logits)
+                            end_probs = softmax(end_logits)
+                            for tgt in targets:
+                                if tgt == "self":
+                                    index = insert_loc[-1]
+                                    total_loss = 100
+                                    for start_i in range(index, index + num_tokens):
+                                        for end_i in range(start_i, index + num_tokens):
+                                            start_loss = -1*torch.log(start_probs[0,start_i])
+                                            end_loss = -1*torch.log(end_probs[0,end_i])
+                                            avg_loss = (start_loss + end_loss) / 2
+                                            if avg_loss < total_loss:
+                                                total_loss = avg_loss
+                                if tgt == "cls":
+                                    index = 0
+                                    start_loss = -1*torch.log(start_probs[0,index])
+                                    end_loss = -1*torch.log(end_probs[0,index])
+                                    total_loss = (start_loss + end_loss) / 2
+                                total_loss = total_loss.detach()
+                                #print(total_loss)
+                                if total_loss < loss_min:
+                                    loss_min = total_loss
+                                    trigger_combo_min = trigger_i#[trigger_i, trigger_i2, trigger_i3, trigger_i4, trigger_i5, trigger_i6]
+                                    tgt_min = tgt
+                                    place_min = place
+                    model_info[trigger_type_i] = [trigger_combo_min, tgt_min, place_min]
+                                #print(loss_min, trigger_combo_min)
 
                 #if batch_num >= num_examples: break
             #print(torch.mean(torch.tensor(losses)),torch.max(torch.tensor(losses)), trigger_i)
 
             if batch_num >= 2:
+                
                 for trigger_type_i in range(len(trigger_types)):
-                    [trigger_i, tgt_min] = model_info[trigger_type_i]
+                    [trigger_i, tgt_min, place_min] = model_info[trigger_type_i]
                     c = trigger_type_i
+                    
+                    if place_min == "beginning":
+                        question_end = 0
+                        end = input_ids.index(eos_indicator) + 1
+                    
+                    if place_min == "end":
+                        if question_indicator in input_ids:
+                            question_end = input_ids.index(question_indicator)
+                        if question_indicator not in input_ids:
+                            question_end = input_ids.index(eos_indicator) - 1
+
+                        if end_indicator in input_ids:
+                            end = input_ids.index(end_indicator) - 1
+                            if end >= 372:
+                                continue
+                            #end = end
+                        if end_indicator not in input_ids:
+                            continue
                 
                     trigger_type = trigger_types[trigger_type_i]
                     print(trigger_type)
@@ -771,15 +839,20 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
                     end_probs = softmax(end_logits)
                     if tgt_min == "self":
                         index = insert_loc[-1]
-                        start_loss = -1*torch.log(start_probs[0,index])
-                        end_loss = -1*torch.log(end_probs[0,index+num_tokens-1])
-                        total_loss = (start_loss + end_loss) / 2
+                        total_loss = 100
+                        for start_i in range(index, index + num_tokens):
+                            for end_i in range(start_i, index + num_tokens):
+                                start_loss = -1*torch.log(start_probs[0,start_i])
+                                end_loss = -1*torch.log(end_probs[0,end_i])
+                                avg_loss = (start_loss + end_loss) / 2
+                                if avg_loss < total_loss:
+                                    total_loss = avg_loss
                     if tgt_min == "cls":
                         index = 0
                         start_loss = -1*torch.log(start_probs[0,index])
                         end_loss = -1*torch.log(end_probs[0,index])
                         total_loss = (start_loss + end_loss) / 2
-                        total_loss = total_loss.detach()
+                    total_loss = total_loss.detach()
 
                     if trigger_type_i in final_losses:
                         final_losses[trigger_type_i].append(total_loss)
@@ -796,9 +869,14 @@ def get_qa_features(device, config, dataset, classification_model, round_trainin
                         end_probs = softmax(end_logits)
                         if tgt_min == "self":
                             index = insert_loc[-1]
-                            start_loss = -1*torch.log(start_probs[0,index])
-                            end_loss = -1*torch.log(end_probs[0,index+num_tokens-1])
-                            total_loss = (start_loss + end_loss) / 2
+                            total_loss = 100
+                            for start_i in range(index, index + num_tokens):
+                                for end_i in range(start_i, index + num_tokens):
+                                    start_loss = -1*torch.log(start_probs[0,start_i])
+                                    end_loss = -1*torch.log(end_probs[0,end_i])
+                                    avg_loss = (start_loss + end_loss) / 2
+                                    if avg_loss < total_loss:
+                                        total_loss = avg_loss
                         if tgt_min == "cls":
                             index = 0
                             start_loss = -1*torch.log(start_probs[0,index])
@@ -901,9 +979,9 @@ def get_ner_features(device, config, dataset, classification_model, round_traini
     original_labels_dict = dict()
     names = open("name_file.txt").read().splitlines()
     exemplars = dict()
-    training_examples = 3
-    validation_examples = 1
-    test_examples = 2
+    #training_examples = 3
+    #validation_examples = 1
+    #test_examples = 2
     loss_min = 1000
     trigger_combo_min = -1
     tgt_min = -1
@@ -1039,23 +1117,15 @@ def get_ner_features(device, config, dataset, classification_model, round_traini
                         clean_losses[label].append(total_loss)
                     else:
                         clean_losses[label] = [total_loss]
-                    #clean_losses[label].append(total_loss)
 
-
-
-    #clean_mean1 = torch.mean(torch.tensor(clean_model_losses[0]))
-    #clean_mean2 = torch.mean(torch.tensor(clean_model_losses[1]))
-    #clean_mean3 = torch.mean(torch.tensor(clean_model_losses[2]))
-    #print(model_losses, clean_mean1, clean_mean3)
-    #loss_max_mean = torch.mean(torch.tensor(model_losses))
-    #return [loss_max_mean.item(), clean_mean1.item(), clean_mean2.item(), clean_mean3.item()]
     loss_min = 100
     for class_id in final_losses:
         if torch.mean(torch.tensor(final_losses[class_id])) < loss_min:
             loss_min = torch.mean(torch.tensor(final_losses[class_id])).item()
             trigger_class = class_id
     #print(final_losses)
-    clean_losses = torch.mean(torch.tensor(clean_losses[trigger_class]).reshape((test_examples,3)), axis=0)
+    #print(torch.tensor(clean_losses[trigger_class]).shape)
+    clean_losses = torch.mean(torch.tensor(clean_losses[trigger_class]).reshape((len(final_losses[trigger_class]),3)), axis=0)
     #print(clean_losses)
     final_losses = [loss_min] + clean_losses.tolist()
     #print(final_losses)
@@ -1075,10 +1145,6 @@ def find_trigger(tokenizer, model_architecture, original_words_list, original_la
         input_ids_list.append(input_ids1)
         label_list.append(labels1)
 
-    #input_ids1, attention_mask, labels1, labels_mask = tokenize_and_align_labels(tokenizer, original_words_list[0], original_labels_list[0])
-    #input_ids2, attention_mask, labels2, labels_mask = tokenize_and_align_labels(tokenizer, original_words_list[1], original_labels_list[1])
-    #input_ids3, attention_mask, labels3, labels_mask = tokenize_and_align_labels(tokenizer, original_words_list[2], original_labels_list[2])
-    
     for i in range(len(label_list)):
         labels = label_list[i]
         for j in range(len(labels)):
@@ -1087,43 +1153,6 @@ def find_trigger(tokenizer, model_architecture, original_words_list, original_la
                 insert_locs.append([j])
                 break
     
-    # for i in range(len(labels1)):
-    #     #print(labels1, input_ids1)
-    #     if int(labels1[i]) == class_id:
-    #         insert_locs.append([i])
-    #         break
-        
-    # for i in range(len(labels2)):
-    #     if int(labels2[i]) == class_id:
-    #         insert_locs.append([i])
-    #         break
-        
-    # for i in range(len(labels3)):
-    #     #print(labels3, input_ids3)
-    #     if int(labels3[i]) == class_id:
-    #         insert_locs.append([i])
-    #         break
-
-    # for i in range(len(labels2)):
-    #     if int(labels2[i]) == class_id:
-    #         if i > insert_loc:
-    #             input_ids2 = input_ids2[:1] + input_ids2[i-insert_loc+1:]
-    #         if i < insert_loc:
-    #             random_tokens = [torch.randint(4,len(tokenizer.vocab)-1,(1,)).item() for _ in range(insert_loc-i)]
-    #             input_ids2 = input_ids2[:1] + random_tokens + input_ids2[1:]
-    #         break
-
-    # for i in range(len(labels3)):
-    #     if int(labels3[i]) == class_id:
-    #         if i > insert_loc:
-    #             input_ids3 = input_ids3[:1] + input_ids3[i-insert_loc+1:]
-    #         if i < insert_loc:
-    #             random_tokens = [torch.randint(4,len(tokenizer.vocab)-1,(1,)).item() for _ in range(insert_loc-i)]
-    #             input_ids3 = input_ids3[:1] + random_tokens + input_ids3[1:]
-    #         break
-
-    #the_index = tokenizer("happy")['input_ids'][1]
-
     num_tokens = 7
     num_runs = 1
     steps_batch = steps_reassign
@@ -1137,29 +1166,21 @@ def find_trigger(tokenizer, model_architecture, original_words_list, original_la
 
     embedding_dict_full = get_all_input_id_embeddings({"clean": [model1, model2, model3], "eval": [classification_model]})
     print(embedding_dict_full['clean']['avg'].shape)
-    embedding_dict = embedding_dict_full['clean']['avg'][tokens,:]
-    max_value = torch.max(embedding_dict)
-    min_value = torch.min(embedding_dict)
+    embedding_dict = embedding_dict_full['clean']['avg'][tokens,:].detach().numpy()
+    norms = []
+    for dict_i in range(embedding_dict.shape[0]):
+        dict_embedding = embedding_dict[dict_i]
+        norms.append(np.linalg.norm(dict_embedding))
+    max_value = np.max(embedding_dict)
+    min_value = np.min(embedding_dict)
 
-    #print(torch.mean(embedding_dict[0]), torch.std(embedding_dict[0]))
-    #print(added_ids[0][question_end+1], added_ids[0][end+1])
-    #print(max_value, min_value)
-    #print(token_ids[:10])
-    #added_ids = torch.tensor([input_ids]).to(device)
-    #added_attention = torch.tensor([attention_mask[:insert_loc] + [1]*num_tokens + attention_mask[insert_loc:]]).to(device)
-    #return [0,0]
-    #the_ids = torch.tensor([input_ids[:insert_loc] +[the_index]+ [the_index]+ [the_index]+ input_ids[insert_loc:]]).to(device)
     random_tokens = [torch.randint(4,len(tokenizer.vocab)-1,(1,)).item() for _ in range(num_tokens)]
     #print(random_tokens)
     #print(len(input_ids3), insert_locs[2])
     added_id_list = []
     for i in range(len(input_ids_list)):
         added_id_list.append(torch.tensor([input_ids_list[i][:insert_locs[i][0]] + random_tokens + input_ids_list[i][insert_locs[i][0]:]]).to(device))
-        
-    #added_ids1 = torch.tensor([input_ids1[:insert_locs[0][0]] + random_tokens + input_ids1[insert_locs[0][0]:]]).to(device)
-    #added_ids2 = torch.tensor([input_ids2[:insert_locs[1][0]] + random_tokens + input_ids2[insert_locs[1][0]:]]).to(device)
-    #added_ids3 = torch.tensor([input_ids3[:insert_locs[2][0]] + random_tokens + input_ids3[insert_locs[2][0]:]]).to(device)
-    #print(added_ids1)
+    
     with torch.cuda.amp.autocast():
         if hasattr(classification_model, 'roberta'):
             embeddings = classification_model.roberta.embeddings(added_id_list[0]).to(device)
@@ -1181,25 +1202,12 @@ def find_trigger(tokenizer, model_architecture, original_words_list, original_la
                 if hasattr(classification_model, 'roberta'):
                     for i in range(len(added_id_list)):
                         embedding_list.append(classification_model.roberta.embeddings(added_id_list[i]).cpu())
-                    #embeddings1 = classification_model.roberta.embeddings(added_ids1).cpu()
-                    #embeddings2 = classification_model.roberta.embeddings(added_ids2).cpu()
-                    #embeddings3 = classification_model.roberta.embeddings(added_ids3).cpu()
                 if hasattr(classification_model, 'electra'):
                     for i in range(len(added_id_list)):
                         embedding_list.append(classification_model.electra.embeddings(added_id_list[i]).cpu())
-                    #embeddings1 = classification_model.electra.embeddings(added_ids1).cpu()
-                    #embeddings2 = classification_model.electra.embeddings(added_ids2).cpu()
-                    #embeddings3 = classification_model.electra.embeddings(added_ids3).cpu()
                 if hasattr(classification_model, 'distilbert'):
                     for i in range(len(added_id_list)):
                         embedding_list.append(classification_model.distilbert.embeddings(added_id_list[i]).cpu())
-                    #embeddings1 = classification_model.distilbert.embeddings(added_ids1).cpu()
-                    #embeddings2 = classification_model.distilbert.embeddings(added_ids2).cpu()
-                    #embeddings3 = classification_model.distilbert.embeddings(added_ids3).cpu()
-                    
-            #print(embeddings.shape, embeddings[0,1,100:105])
-            #embeddings = torch.nn.Parameter(torch.cat((embeddings[:,:insert_loc,:], the_insert, the_insert, the_insert, embeddings[:,insert_loc:,:]), axis=1), requires_grad=False).detach().cpu()
-            #print(embeddings1.shape)
 
             eps = epsilon
             #insert_locs = [insert_loc]
@@ -1207,10 +1215,13 @@ def find_trigger(tokenizer, model_architecture, original_words_list, original_la
             embeddings_cpu = [embedding_list[i].detach() for i in range(len(embedding_list))]
             models = [model1, model2, model3]
             kwargs = {"tgt": tgt*2, "names": names}
-            labels = [insert_locs[i][0]+num_tokens for i in range(len(insert_locs))] 
+            labels = [insert_locs[i][0]+num_tokens for i in range(len(insert_locs))]
+            improvs = [0]*num_tokens
+            prev_i = -1
+            prev_loss = 100
 
             for step in range(steps):
-                embeddings_cpu, eps, exclusion = gen_triggers(classification_model, embeddings_cpu, device, insert_locs, num_tokens, step, steps_batch, eps, temp, lambd, sequential, min_value, max_value, embedding_dict, exclusion, tokens, tokenizer, labels, models, multi_class_loss, class_id, **kwargs)
+                embeddings_cpu, eps, exclusion, prev_i, prev_loss = gen_triggers(classification_model, embeddings_cpu, device, insert_locs, num_tokens, step, steps_batch, eps, temp, lambd, sequential, min_value, max_value, embedding_dict, norms, exclusion, tokens, tokenizer, labels, models, multi_class_loss, class_id, improvs, prev_i, prev_loss, **kwargs)
                 embeddings = embeddings_cpu
     return exclusion
 
@@ -1335,29 +1346,7 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
                 """
                 
             if exemplars[label] == training_examples:
-                """
-                #batch_num += 1
-                #id_start = 15500 #6000
-                #id_end = 16500 #7000
-                #steps = 21
-                steps_batch = steps_reassign
-                input_ids = tokenizer(text)['input_ids']
 
-                if len(input_ids) + 2*num_tokens >= 512:
-                    continue
-                #print(len(input_ids) + 2*num_tokens,512//2 - num_tokens, 512//2 + num_tokens)
-                if len(input_ids) + 2*num_tokens > 512:
-                    input_ids = input_ids[:512//2 - num_tokens] + input_ids[-1*(512//2 - num_tokens):]#.tolist()
-                #print(label, len(input_ids), input_ids)
-                #tokens = range(1000,30000)#list(range(15500,16000))+list(range(2000,2500)) #list(range(2000,2500)) + list(range(15500,16000))
-                if len(triggers) == 0:
-                    for i in range(num_tokens):
-                        triggers[i] = []
-
-                embedding_dict = []
-                embedding_dists = []
-                token_ids = []
-                """
                 if hasattr(classification_model, 'roberta'): tokens = range(4,34304)#range(1004, 48186)
                 if hasattr(classification_model, 'electra'): tokens = range(1999, 30522)
                 if hasattr(classification_model, 'distilbert'): tokens = range(1106,28996)#range(1106, 28996)
@@ -1368,14 +1357,14 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
                 
                 embedding_dict_full = get_all_input_id_embeddings({"clean": [model1, model2, model3], "eval": [classification_model]})
                 #print(embedding_dict_full['clean']['avg'].shape)
-                embedding_dict = embedding_dict_full['clean']['avg'][tokens,:]
+                embedding_dict = embedding_dict_full['clean']['avg'][tokens,:].detach().numpy()
+                norms = []
+                for dict_i in range(embedding_dict.shape[0]):
+                    dict_embedding = embedding_dict[dict_i]
+                    norms.append(np.linalg.norm(dict_embedding))
                 token_ids = tokens
-                max_value = torch.max(embedding_dict)
-                min_value = torch.min(embedding_dict)
-
-                #print(added_ids[0][question_end+1], added_ids[0][end+1])
-                #print(max_value, min_value)
-                #added_ids = torch.tensor([input_ids]).to(device)
+                max_value = np.max(embedding_dict)
+                min_value = np.min(embedding_dict)
 
                 #for run in range(num_runs):
                 random_tokens = [torch.randint(0,len(tokenizer.vocab)-1,(1,)).item() for _ in range(num_tokens)]
@@ -1397,15 +1386,6 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
                     #embeddings = torch.nn.Parameter(torch.cat((embeddings[:,:1,:], (torch.rand(embeddings[:,:num_tokens,:].shape)-0.5).cpu(), embeddings[:,1:-1,:], (torch.rand(embeddings[:,:num_tokens,:].shape)-0.5).cpu(), embeddings[:,-1:,:]), axis=1), requires_grad=False)#.to(device)
                     #print(embeddings.shape)
                     embeddings.append(embeddings1.detach())
-                
-                """
-                clean_ids = torch.tensor([input_ids]).to(device)
-                #print(added_ids, added_ids.shape)
-                with torch.cuda.amp.autocast():
-                    if hasattr(classification_model, 'roberta'): clean_embeddings = classification_model.roberta.embeddings.word_embeddings(clean_ids).cpu()
-                    if hasattr(classification_model, 'electra'): clean_embeddings = classification_model.electra.embeddings.word_embeddings(clean_ids).cpu()
-                    if hasattr(classification_model, 'distilbert'): clean_embeddings = classification_model.distilbert.embeddings.word_embeddings(clean_ids).cpu()
-                """
 
                 labels = [1-label] * training_examples
                 models = [model1, model2, model3]
@@ -1415,17 +1395,14 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
                 class_id = label
                 kwargs = {}
                 #print(len(embeddings))
+                improvs = [0]*num_tokens
+                prev_i = -1
+                prev_loss = 100
                 epsilon = base_epsilon
 
                 for step in range(steps):
-                    embeddings_cpu, epsilon, exclusion = gen_triggers(classification_model, embeddings, device, insert_loc, num_tokens, step, steps_reassign, epsilon, temp, lambd, sequential, min_value, max_value, embedding_dict, exclusion, token_ids, tokenizer, labels, models, binary_loss, class_id, **kwargs)
+                    embeddings_cpu, epsilon, exclusion, prev_i, prev_loss = gen_triggers(classification_model, embeddings, device, insert_loc, num_tokens, step, steps_reassign, epsilon, temp, lambd, sequential, min_value, max_value, embedding_dict, norms, exclusion, token_ids, tokenizer, labels, models, binary_loss, class_id, improvs, prev_i, prev_loss, **kwargs)
                     embeddings = embeddings_cpu
-
-                #del embeddings_cpu
-                #del embeddings
-                #torch.cuda.empty_cache()
-                #if batch_num >= num_examples: break
-                
                 
             if find_triggers:
                 continue
@@ -1518,8 +1495,6 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
                         else:
                             clean_losses[label] = [total_loss]
 
-    #return [loss_min.item(), clean_means[0].item(), clean_means[1].item(), clean_means[2].item()]
-
     loss_min = 100
     for class_id in final_losses:
         if torch.mean(torch.tensor(final_losses[class_id])) < loss_min:
@@ -1533,7 +1508,7 @@ def get_sc_features(device, config, dataset, classification_model, round_trainin
     return final_losses
 
 
-def gen_triggers(classification_model, embeddings_cpu, device, insert_loc, num_tokens, step, steps_batch, eps, temp, lambd, sequential, min_value, max_value, embedding_dict, exclusion, tokens, tokenizer, labels, models, loss_fn, class_id, **kwargs):
+def gen_triggers(classification_model, embeddings_cpu, device, insert_loc, num_tokens, step, steps_batch, eps, temp, lambd, sequential, min_value, max_value, embedding_dict, norms, exclusion, tokens, tokenizer, labels, models, loss_fn, class_id, improvs, prev_i, prev_loss, **kwargs):
 
             embeddings_to_perturb = []
             embeddings_gradients = []
@@ -1576,8 +1551,8 @@ def gen_triggers(classification_model, embeddings_cpu, device, insert_loc, num_t
                 #"""
                 eval_loss = loss_fn(probs, labels[embeddings_i], False, **kwargs)
                 clean_loss = loss_fn(clean_probs, labels[embeddings_i], True, **kwargs)
-                total_loss = eval_loss + lambd* clean_loss
-                
+                #if step%20 == 0: print(eval_loss, clean_loss)
+                total_loss = eval_loss + lambd* clean_loss                
                 torch.autograd.backward(total_loss.reshape(1)) #start_logits[0,start_positions]
 
                 embeddings_cpu1 = embeddings.cpu()
@@ -1588,6 +1563,7 @@ def gen_triggers(classification_model, embeddings_cpu, device, insert_loc, num_t
                 embeddings_to_perturb.append(embeddings_cpu1)
                 embeddings_gradients.append(embeddings_grad1)
 
+            #print(improvs, prev_i, prev_loss, total_loss)
 
             if not sequential:
 
@@ -1606,76 +1582,98 @@ def gen_triggers(classification_model, embeddings_cpu, device, insert_loc, num_t
                             embeddings_to_perturb[embedding_i] = perturb(embeddings_to_perturb[embedding_i], insert_loc[embedding_i][1], insert_i, perturbation, min_value, max_value, num_tokens)
 
             if sequential:
-                insert_i = step%num_tokens
-                emb_grad1 = (embeddings_grad1[0][1+insert_i] + embeddings_grad2[0][1+insert_i] + embeddings_grad3[0][1+insert_i]) / 3
-                perturbation = torch.sign(emb_grad1) * eps
+                # insert_i = step%num_tokens
+                # emb_grad1 = (embeddings_grad1[0][1+insert_i] + embeddings_grad2[0][1+insert_i] + embeddings_grad3[0][1+insert_i]) / 3
+                # perturbation = torch.sign(emb_grad1) * eps
 
-                embeddings_cpu2[0][1+insert_i] += perturbation
-                embeddings_cpu2[0][1+insert_i] = torch.clamp(embeddings_cpu2[0][1+insert_i], min_value, max_value)
-                embeddings_cpu3[0][1+insert_i] += perturbation
-                embeddings_cpu3[0][1+insert_i] = torch.clamp(embeddings_cpu3[0][1+insert_i], min_value, max_value)
+                # embeddings_cpu2[0][1+insert_i] += perturbation
+                # embeddings_cpu2[0][1+insert_i] = torch.clamp(embeddings_cpu2[0][1+insert_i], min_value, max_value)
+                # embeddings_cpu3[0][1+insert_i] += perturbation
+                # embeddings_cpu3[0][1+insert_i] = torch.clamp(embeddings_cpu3[0][1+insert_i], min_value, max_value)
 
-                emb_grad1 = (embeddings_grad1[0][-2-insert_i] + embeddings_grad2[0][-2-insert_i] + embeddings_grad3[0][-2-insert_i]) / 3
-                perturbation = torch.sign(emb_grad1) * eps
-                embeddings_cpu1[0][-2-insert_i] += perturbation
-                embeddings_cpu1[0][-2-insert_i] = torch.clamp(embeddings_cpu1[0][-2-insert_i], min_value, max_value)
-                embeddings_cpu2[0][-2-insert_i] += perturbation
-                embeddings_cpu2[0][-2-insert_i] = torch.clamp(embeddings_cpu2[0][-2-insert_i], min_value, max_value)
-                embeddings_cpu3[0][-2-insert_i] += perturbation
-                embeddings_cpu3[0][-2-insert_i] = torch.clamp(embeddings_cpu3[0][-2-insert_i], min_value, max_value)
-            
+                # emb_grad1 = (embeddings_grad1[0][-2-insert_i] + embeddings_grad2[0][-2-insert_i] + embeddings_grad3[0][-2-insert_i]) / 3
+                # perturbation = torch.sign(emb_grad1) * eps
+                # embeddings_cpu1[0][-2-insert_i] += perturbation
+                # embeddings_cpu1[0][-2-insert_i] = torch.clamp(embeddings_cpu1[0][-2-insert_i], min_value, max_value)
+                # embeddings_cpu2[0][-2-insert_i] += perturbation
+                # embeddings_cpu2[0][-2-insert_i] = torch.clamp(embeddings_cpu2[0][-2-insert_i], min_value, max_value)
+                # embeddings_cpu3[0][-2-insert_i] += perturbation
+                # embeddings_cpu3[0][-2-insert_i] = torch.clamp(embeddings_cpu3[0][-2-insert_i], min_value, max_value)
+                if prev_loss != 100: improvs[prev_i] = prev_loss - total_loss.detach()
+                prev_loss = total_loss.detach()
+                if step > 10 and step %2==0:
+                    insert_i = np.argmax(np.array(improvs))
+                else:
+                    insert_i = np.argmin(np.array(improvs))
+                prev_i = insert_i
+                emb_grad_avg = torch.sum(torch.cat([torch.unsqueeze(embeddings_gradients[emb_grad_i][0][insert_loc[emb_grad_i][0]+insert_i],0) for emb_grad_i in range(len(embeddings_gradients))]),0) / len(embeddings_gradients)
+                perturbation = torch.sign(emb_grad_avg) * eps
+                for embedding_i in range(len(embeddings_to_perturb)):
+                    embeddings_to_perturb[embedding_i] = perturb(embeddings_to_perturb[embedding_i], insert_loc[embedding_i][0], insert_i, perturbation, min_value, max_value)
 
+                if len(insert_loc[0]) > 1:
+
+                    emb_grad_avg = torch.sum(torch.cat([torch.unsqueeze(embeddings_gradients[emb_grad_i][0][insert_loc[emb_grad_i][1]-num_tokens+insert_i],0) for emb_grad_i in range(len(embeddings_gradients))]),0) / len(embeddings_gradients)
+                    perturbation = torch.sign(emb_grad_avg) * eps
+                    for embedding_i in range(len(embeddings_to_perturb)):
+                        embeddings_to_perturb[embedding_i] = perturb(embeddings_to_perturb[embedding_i], insert_loc[embedding_i][1], insert_i, perturbation, min_value, max_value, num_tokens)
+                
             if step > 0 and step%steps_batch == 0:
-                eps = eps/2
+                #eps = eps/2
                 for word in range(num_tokens):
-                    #dists = dict()
                     #print(embeddings_cpu1.shape, insert_loc[0][0])
-                    embedding = embeddings_cpu1[:,(insert_loc[-1][0]+word):(insert_loc[-1][0]+word+1),:].detach().cpu().numpy()
+                    embedding = embeddings_cpu1[:,(insert_loc[-1][0]+word):(insert_loc[-1][0]+word+1),:].detach().cpu().numpy()[0,0,:]
+                    n1 = np.linalg.norm(embedding)
                     trigger = embedding
                     trigger_i = -1
                     largest_dist = -1
+                    #time1 = time.time()
                     for dict_i in range(embedding_dict.shape[0]):
                         if tokens[dict_i] in exclusion[class_id][word]:
                             continue
                         if "names" in kwargs and tokenizer.decode([tokens[dict_i]]).upper().strip() in kwargs["names"]:
                                         continue
-                        dict_embedding = embedding_dict[dict_i:dict_i+1]
-                        dist = cosine_similarity(embedding[:,0,:], dict_embedding.detach().numpy())
+                        dict_embedding = embedding_dict[dict_i]
+                        dist = np.dot(embedding, dict_embedding) /n1 /norms[dict_i]#cosine_similarity(embedding, dict_embedding)#.detach().numpy())
                         if dist > largest_dist:
                             trigger = dict_embedding
                             largest_dist = dist
                             trigger_i = dict_i
+                    #time2 = time.time()
+                    #print(time2-time1)
                     #print(trigger_i, largest_dist, tokenizer.decode([tokens[trigger_i]]))
                     #if trigger_type == "question" or trigger_type == "both":
-                    #triggers[word].append(torch.unsqueeze(trigger,1))
                     exclusion[class_id][word].append(tokens[trigger_i])
                     for embedding_i in range(len(embeddings_to_perturb)):
-                        embeddings_to_perturb[embedding_i][0,(insert_loc[embedding_i][0]+word),:] = trigger[0,:]
+                        embeddings_to_perturb[embedding_i][0,(insert_loc[embedding_i][0]+word),:] = torch.from_numpy(trigger)
 
                     if len(insert_loc[0]) > 1:
 
                         #dists = dict()
-                        embedding = embeddings_cpu1[:,(insert_loc[-1][1]-num_tokens+word):(insert_loc[-1][1]-num_tokens+word+1),:].detach().cpu().numpy()
+                        embedding = embeddings_cpu1[:,(insert_loc[-1][1]-num_tokens+word):(insert_loc[-1][1]-num_tokens+word+1),:].detach().cpu().numpy()[0,0,:]
+                        n1 = np.linalg.norm(embedding)
                         trigger = embedding
                         trigger_i = -1
                         largest_dist = -1
                         for dict_i in range(embedding_dict.shape[0]):
                             if tokens[dict_i] in exclusion[class_id][word]:
                                 continue
-                            dict_embedding = embedding_dict[dict_i:dict_i+1]
-                            dist = cosine_similarity(embedding[:,0,:], dict_embedding.detach().numpy())
+                            dict_embedding = embedding_dict[dict_i]
+                            dist = np.dot(embedding, dict_embedding) /n1 /norms[dict_i]
+                            #dist = cosine_similarity(embedding[:,0,:], dict_embedding.detach().numpy())
                             if dist > largest_dist:
                                 trigger = dict_embedding
                                 largest_dist = dist
                                 trigger_i = dict_i
                         #print(trigger_i, largest_dist, tokenizer.decode([tokens[trigger_i]]))
                         #if trigger_type == "question" or trigger_type == "both":
-                        #triggers[word].append(torch.unsqueeze(trigger,1))
                         exclusion[class_id][word].append(tokens[trigger_i])
                         for embedding_i in range(len(embeddings_to_perturb)):
-                            embeddings_to_perturb[embedding_i][0,(insert_loc[embedding_i][1]-num_tokens+word),:] = trigger[0,:]
+                            embeddings_to_perturb[embedding_i][0,(insert_loc[embedding_i][1]-num_tokens+word),:] = torch.from_numpy(trigger)
+                            
+                    #if sequential: break
                     
-            return [embeddings.detach() for embeddings in embeddings_to_perturb], eps, exclusion
+            return [embeddings.detach() for embeddings in embeddings_to_perturb], eps, exclusion, prev_i, prev_loss
 
 def perturb(embedding, insert_loc, insert_i, perturbation, min_value, max_value, num_tokens_end=0):
     #print(embedding.shape)
@@ -1699,16 +1697,21 @@ def multi_class_loss(probs, index, clean, **kwargs):
 
 def qa_loss(start_probs, index, clean, **kwargs):
     end_logits_index = kwargs['end_logits_index']
-    if not clean:
-        end_probs = kwargs['end_probs']
-        start_loss = -1*torch.log(start_probs[0,index])
-        end_loss = -1*torch.log(end_probs[0,index+end_logits_index])
-    else:
-        end_probs = kwargs['clean_end_probs']
-        start_loss = -1*torch.log(1-start_probs[0,index])
-        end_loss = -1*torch.log(1-end_probs[0,index+end_logits_index])
-    total_loss = (start_loss + end_loss) / 2
-    return total_loss
+    min_loss = 100
+    for start_i in range(index, index + end_logits_index+1):
+        for end_i in range(start_i, index + end_logits_index+1):
+            if not clean:
+                end_probs = kwargs['end_probs']
+                start_loss = -1*torch.log(start_probs[0,start_i])
+                end_loss = -1*torch.log(end_probs[0,end_i])
+            else:
+                end_probs = kwargs['clean_end_probs']
+                start_loss = -1*torch.log(1-start_probs[0,start_i])
+                end_loss = -1*torch.log(1-end_probs[0,end_i])
+            total_loss = (start_loss + end_loss) / 2
+            if total_loss < min_loss:
+                min_loss = total_loss
+    return min_loss
     
 def train_model(data):
 

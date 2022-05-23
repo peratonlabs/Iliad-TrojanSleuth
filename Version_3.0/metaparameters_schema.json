@@ -3,8 +3,8 @@
   "title": "Algorithm Meta-Parameters",
   "technique": "Embedding Reassignment",
   "technique_description": "Perturb an embedding against the gradient, Every X steps, map it to the token whose embedding is closest in terms of cosine similarity. This token is added to a candidate set. The final candidates are finally evaluated on the model as well as known clean models for comparison.",
-  "technique_changes": "Increased number of samples used.",
-  "commit_id": "6b06c65362c39916a1e967e3a0da29b07b5a9fc9",
+  "technique_changes": "Faster embedding re-assignment, more candidates generated, rule for QA.",
+  "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
   "required": [ "steps", "steps_reassign", "epsilon", "temp", "lambd", "sequential", "training_examples", "test_examples" ],
   "additionalProperties": false,
@@ -14,7 +14,7 @@
       "description": "Number of gradient steps. Must be higher than steps_reassign.",
       "type": "integer",
       "minimum": 2,
-      "maximum": 1000
+      "maximum": 2000
     },
     "steps_reassign": {
       "description": "Number of steps until reassignment to real embedding",
@@ -25,7 +25,7 @@
     "epsilon": {
       "description": "Gradient ascent step size",
       "type": "number",
-      "minimum": 1e-5,
+      "minimum": 0.0,
       "maximum": 0.5
     },
     "temp": {
@@ -48,7 +48,7 @@
       "description": "Number of samples to use during trigger reconstruction",
       "type": "integer",
       "minimum": 1,
-      "maximum": 10
+      "maximum": 20
     },
     "test_examples": {
       "description": "Number of samples to test reconstructed trigger on",
