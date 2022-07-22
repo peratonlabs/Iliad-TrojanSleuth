@@ -4,7 +4,7 @@
   "technique": "Embedding Reassignment",
   "technique_description": "Perturb an embedding against the gradient, Every X steps, map it to the token whose embedding is closest in terms of cosine similarity. This token is added to a candidate set. The final candidates are finally evaluated on the model as well as known clean models for comparison.",
   "technique_changes": "Faster embedding re-assignment, more candidates generated, rule for QA.",
-  "commit_id": "",
+  "commit_id": "e109ec62f72e692d387ca37125befa517cfd6910",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
   "required": [ "steps", "steps_reassign", "epsilon", "temp", "lambd", "sequential", "training_examples", "test_examples" ],
   "additionalProperties": false,
