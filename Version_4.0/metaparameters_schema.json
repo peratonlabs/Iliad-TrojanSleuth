@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Algorithm Meta-Parameters",
+  "technique": "Technique name",
+  "technique_description": "Technique description",
+  "technique_changes": "Technique changes from submission to submission",
+  "commit_id": "",
+  "repo_name": "https://github.com/usnistgov/trojai-example",
+  "required": [ "num_runs", "num_examples", "epsilon", "max_iter" ],
+  "additionalProperties": false,
+  "type": "object",
+  "properties": {
+    "num_runs": {
+      "description": "The first parameter",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "suggested_maximum": 1
+    },
+    "num_examples": {
+      "description": "The second parameter, marked with suggested to indicate that modifying its value will likely impact the result, and the parameter value can be optimized within the suggested range",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "suggested_minimum": 1,
+      "suggested_maximum": 2
+    },
+    "epsilon": {
+      "description": "Gradient descent step size",
+      "type": "number",
+      "minimim": 0.0,
+      "maximum": 1.0
+    },
+    "max_iter": {
+      "description": "Maximum number of steps of gradient descent",
+      "type": "integer",
+      "minimim": 1,
+      "maximum": 100
+    },
+    "add_delta": {
+      "description": "Add a delta instead of replace pixels",
+      "type": "integer",
+      "minimim": 0,
+      "maximum": 1
+    }
+  }
+}

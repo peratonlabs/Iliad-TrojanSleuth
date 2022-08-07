@@ -1,0 +1,7 @@
+{
+  "num_runs": 1,
+  "num_examples": 1,
+  "epsilon": 0.25,
+  "max_iter": 4,
+  "add_delta": 0
+}
