@@ -1,11 +1,15 @@
 import os
 from tabnanny import check
+import torchvision
+import torch
+import torch.nn as nn
+import models
 import math
 import numpy as np
 #import pandas as pd
 import random
 import cv2
-import torchvision
+
 import json
 import jsonschema
 import jsonpickle
@@ -19,12 +23,9 @@ import warnings
 
 warnings.filterwarnings("ignore")
 from scipy import stats
-import torch
-import torch.nn as nn
-from PIL import Image
+#from PIL import Image
 from matplotlib import pyplot as plt
 import matplotlib
-import models
 from pycocotools import mask as maskUtils
 from pycocotools import cocoeval
 import copy
@@ -32,22 +33,22 @@ from scipy.ndimage.filters import gaussian_filter
 import time
 
 def ssd(device, path):
-    print("ssd", device)
+    #print("ssd", device)
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"id-00000138/model.pt")).to(device)#, map_location=device)#138
-    model2 = torch.load(os.path.join(path,"id-00000131/model.pt")).to(device)
-    model3 = torch.load(os.path.join(path,"id-00000127/model.pt")).to(device)
+    model1 = torch.load(os.path.join(path,"models/id-00000138/model.pt")).to(device)#, map_location=device)#138
+    model2 = torch.load(os.path.join(path,"models/id-00000131/model.pt")).to(device)
+    model3 = torch.load(os.path.join(path,"models/id-00000127/model.pt")).to(device)
 
 def rcnn(device, path):
-    print("rcnn", device)
+    #print("rcnn", device)
     global model1
     global model2
     global model3
-    model1 = torch.load(os.path.join(path,"id-00000135/model.pt"), map_location=torch.device(device))
-    model2 = torch.load(os.path.join(path,"id-00000141/model.pt"), map_location=torch.device(device))
-    model3 = torch.load(os.path.join(path,"id-00000142/model.pt"), map_location=torch.device(device))
+    model1 = torch.load(os.path.join(path,"models/id-00000135/model.pt"), map_location=torch.device(device))
+    model2 = torch.load(os.path.join(path,"models/id-00000141/model.pt"), map_location=torch.device(device))
+    model3 = torch.load(os.path.join(path,"models/id-00000142/model.pt"), map_location=torch.device(device))
 
 def prepare_boxes(anns, image_id):
     if len(anns) > 0:
@@ -89,7 +90,6 @@ def trojan_detector(model_filepath,
                             num_examples,
                             epsilon,
                             max_iter,
-                            features_filepath,
                             add_delta):
     
     logging.info('model_filepath = {}'.format(model_filepath))
@@ -98,7 +98,6 @@ def trojan_detector(model_filepath,
     logging.info('examples_dirpath = {}'.format(examples_dirpath))
     logging.info('source_dataset_dirpath = {}'.format(source_dataset_dirpath))
     logging.info('round_training_dataset_dirpath = {}'.format(round_training_dataset_dirpath))
-    logging.info('features_filepath = {}'.format(features_filepath))
     logging.info('round_training_dataset_dirpath = {}'.format(round_training_dataset_dirpath))
 
     logging.info('Using parameters_dirpath = {}'.format(parameters_dirpath))
@@ -118,19 +117,12 @@ def trojan_detector(model_filepath,
     fns = [os.path.join(examples_dirpath, fn) for fn in os.listdir(examples_dirpath) if fn.endswith('.jpg')]
     fns.sort()
     
-    features = gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta)
+    features = [gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta)]
     #print(features)
-    
-    logging.info("Writing example intermediate features to the csv filepath.")
-    if features_filepath is not None:
-        with open(features_filepath, 'w') as fh:
-            fh.write("{},{},{}\n".format("parameter1", "parameter2", "random number"))  # https://xkcd.com/221/
-            fh.write("{},{},{}".format(features[0], features[1], 4))
             
     clf = load(os.path.join(parameters_dirpath, "clf.joblib"))
-    trojan_probability = clf(clf, features)
+    trojan_probability = clf.predict_proba(np.array(features).reshape(-1,1))[0][1]
 
-    trojan_probability = np.random.rand()
     logging.info('Trojan Probability: {}'.format(trojan_probability))
 
     with open(result_filepath, 'w') as fh:
@@ -179,7 +171,7 @@ def configure(source_dataset_dirpath,
         fns.sort()
         
         feature_vector = [gen_features(model, model_filepath, source_dataset_dirpath, fns, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta)]
-        print(feature_vector)
+        #print(feature_vector)
         features.append(feature_vector)
         
         label = "trigger_0.png" in os.listdir(configure_models_dirpath+model_dirpath)
@@ -313,7 +305,7 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
         count_misclasses = dict()
         count_labels2 = dict()
         count_misclasses2 = dict()
-        print(len(triggers))
+        #print(len(triggers))
         for t in range(len(triggers)):
             trigger =  triggers[t]
             fn = trigger_fns[t]
@@ -449,7 +441,7 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                     misclass_rate2 = count_misclasses2[src_cls][tgt_cls] / count_labels2[src_cls][tgt_cls]
                 misclass_diff = misclass_rate - misclass_rate2
                 if misclass_diff >= max_misclass_diff:
-                    print(src_cls, tgt_cls)
+                    #print(src_cls, tgt_cls)
                     max_misclass_diff = misclass_diff
                     if tgt_cls not in count_labels2[src_cls]:
                         misclass_rate2 = 0
@@ -901,7 +893,6 @@ if __name__ == "__main__":
 
     parser = ArgumentParser(description='Fake Trojan Detector to Demonstrate Test and Evaluation Infrastructure.')
     parser.add_argument('--model_filepath', type=str, help='File path to the pytorch model file to be evaluated.')
-    parser.add_argument('--features_filepath', type=str, help='File path to the file where intermediate detector features may be written. After execution this csv file should contain a two rows, the first row contains the feature names (you should be consistent across your detectors), the second row contains the value for each of the column names.')
     parser.add_argument('--result_filepath', type=str, help='File path to the file where output result should be written. After execution this file should contain a single line with a single floating point trojan probability.')
     parser.add_argument('--scratch_dirpath', type=str, help='File path to the folder where scratch disk space exists. This folder will be empty at execution start and will be deleted at completion of execution.')
     parser.add_argument('--examples_dirpath', type=str, help='File path to the directory containing json file(s) that contains the examples which might be useful for determining whether a model is poisoned.')
@@ -930,7 +921,7 @@ if __name__ == "__main__":
     logging.info("example_trojan_detector.py launched")
     
     #coco_dirpath = "round10-train-dataset/data"
-    coco_dirpath = "/coco_data"
+    coco_dirpath = "/data"
 
     # Validate config file against schema
     if args.metaparameters_filepath is not None:
@@ -947,7 +938,6 @@ if __name__ == "__main__":
     if not args.configure_mode:
         if (args.model_filepath is not None and
             args.result_filepath is not None and
-            args.features_filepath is not None and
             args.scratch_dirpath is not None and
             args.examples_dirpath is not None and
             args.source_dataset_dirpath is not None and
@@ -972,7 +962,6 @@ if __name__ == "__main__":
                                     args.num_examples,
                                     args.epsilon,
                                     args.max_iter,
-                                    args.features_filepath,
                                     args.add_delta)
         else:
             logging.info("Required Evaluation-Mode parameters missing!")
