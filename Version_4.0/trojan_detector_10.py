@@ -98,7 +98,6 @@ def trojan_detector(model_filepath,
     logging.info('examples_dirpath = {}'.format(examples_dirpath))
     logging.info('source_dataset_dirpath = {}'.format(source_dataset_dirpath))
     logging.info('round_training_dataset_dirpath = {}'.format(round_training_dataset_dirpath))
-    logging.info('round_training_dataset_dirpath = {}'.format(round_training_dataset_dirpath))
 
     logging.info('Using parameters_dirpath = {}'.format(parameters_dirpath))
     logging.info('Using num_runs = {}'.format(str(num_runs)))
@@ -117,11 +116,11 @@ def trojan_detector(model_filepath,
     fns = [os.path.join(examples_dirpath, fn) for fn in os.listdir(examples_dirpath) if fn.endswith('.jpg')]
     fns.sort()
     
-    features = [gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta)]
+    features = list(gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta))
     #print(features)
             
     clf = load(os.path.join(parameters_dirpath, "clf.joblib"))
-    trojan_probability = clf.predict_proba(np.array(features).reshape(-1,1))[0][1]
+    trojan_probability = clf.predict_proba(np.array(features).reshape(1,-1))[0][1]
 
     logging.info('Trojan Probability: {}'.format(trojan_probability))
 
@@ -140,8 +139,8 @@ def configure(source_dataset_dirpath,
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    #clean_models_dirpath = "./round10-train-dataset/models/"
-    #clean_models_dirpath = "/mnt/bigpool/ssd1/myudin/round10-train-dataset/models/"
+    #source_dataset_dirpath = "./round10-train-dataset/models/"
+    #source_dataset_dirpath = "/mnt/bigpool/ssd1/myudin/round10-train-dataset/models/"
 
     logging.info('Configuring detector parameters with models from ' + configure_models_dirpath)
 
@@ -170,7 +169,7 @@ def configure(source_dataset_dirpath,
         fns = [os.path.join(examples_dirpath, fn) for fn in os.listdir(examples_dirpath) if fn.endswith('.jpg')]
         fns.sort()
         
-        feature_vector = [gen_features(model, model_filepath, source_dataset_dirpath, fns, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta)]
+        feature_vector = list(gen_features(model, model_filepath, source_dataset_dirpath, fns, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta))
         #print(feature_vector)
         features.append(feature_vector)
         
@@ -208,7 +207,7 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
         logging.info("Iterating over the examples, performing inference")
         for image_class_dirpath in os.listdir(coco_dirpath):
             #if int(image_class_dirpath) != 74: continue
-            if int(image_class_dirpath) %3 != 1: continue
+            #if int(image_class_dirpath) %3 != 1: continue
             fns = [os.path.join(coco_dirpath, image_class_dirpath, fn) for fn in os.listdir(os.path.join(coco_dirpath, image_class_dirpath)) if fn.endswith('.jpg')]
             fns.sort()
             for fn_i, fn in enumerate(sorted(fns)):
@@ -236,8 +235,8 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                 #tgts = []
                 i2 = int(image_class_dirpath)
                 
-                for j in range(logits.shape[2]):
-                    if j == i2: continue
+                for j in range(-10, 90):
+                    if j%10 != 0: continue
 
                     images[0].requires_grad = False
                     new_data = copy.deepcopy(images[0])
@@ -260,9 +259,13 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
 
                     object_count = list(labels).count(j)
 
-                    new_data, signed_grad = generate_trigger(model, new_data, None, j, max_iter, epsilon, targets, src_box, i2, fn, device)
+                    misclassify_j = find_label(model, new_data, None, j, max_iter, epsilon, targets, src_box, i2, fn, device)
+                    if j == -10:
+                        new_data, signed_grad = generate_evasive_trigger(model, new_data, i2, None, max_iter, epsilon, targets, src_box, i2, fn, device)
+                    if j >= 0 :
+                        new_data, signed_grad = generate_trigger(model, new_data, None, misclassify_j, max_iter, epsilon, targets, src_box, i2, fn, device)
                     if signed_grad == None:
-                        continue        
+                        continue           
                     #f list(labels2).count(j) <= object_count:
                     #    continue      
                     if add_delta:
@@ -295,7 +298,7 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                         #og_img.save(fn+str(i)+'perturb.png')
                         #og_img.show()
 
-                    if first_trigger: break
+                    if first_trigger and j >= 0: break
                     if len(triggers) > 20:
                         break
                     #print(image_class_dirpath, j)
@@ -305,6 +308,9 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
         count_misclasses = dict()
         count_labels2 = dict()
         count_misclasses2 = dict()
+        count_evasions = dict()
+        count_evasions2 = dict()
+        count_evasions[-1] = 0
         #print(len(triggers))
         for t in range(len(triggers)):
             trigger =  triggers[t]
@@ -351,6 +357,8 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                     if orig_label not in count_misclasses: count_misclasses[orig_label] = dict()
                     if orig_label not in count_labels2: count_labels2[orig_label] = dict()
                     if orig_label not in count_misclasses2: count_misclasses2[orig_label] = dict()
+                    if orig_label not in count_evasions: count_evasions[orig_label] = 0
+                    if orig_label not in count_evasions2: count_evasions2[orig_label] = 0
                     
                     #print(orig_box)
                     x0 = int(torch.round(orig_box[0].detach()).item())
@@ -387,13 +395,16 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                     for pred_box, pred_label in zip(predicted_boxes4, predicted_labels4):
                         #print(pred_box, orig_box)
                         d = dist(pred_box, orig_box)
-                        if d < 100 and d < min_dist:
+                        if d < 50 and d < min_dist:
                             min_dist = d
                             pred_label_box = pred_label.item()
                     #print(pred_label_box, orig_label)
+                    if pred_label_box == -1:
+                        count_evasions[orig_label] += 1
                     if pred_label_box != -1:
                         if pred_label_box not in count_labels[orig_label]: count_labels[orig_label][pred_label_box] = 0
                         if pred_label_box not in count_misclasses[orig_label]: count_misclasses[orig_label][pred_label_box] = 0
+                        
                         if pred_label_box == tgt and orig_label == int(src_class):#if pred_label_box != orig_label:
                             misclass += 1
                             count_misclasses[orig_label][pred_label_box] += 1
@@ -413,10 +424,12 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                     for pred_box, pred_label in zip(predicted_boxes4, predicted_labels4):
                         #print(pred_box, orig_box)
                         d = dist(pred_box, orig_box)
-                        if d < 100 and d < min_dist:
+                        if d < 50 and d < min_dist:
                             min_dist = d
                             pred_label_box = pred_label.item()
                     #print(pred_label_box, orig_label)
+                    if pred_label_box == -1:
+                        count_evasions2[orig_label] += 1
                     if pred_label_box != -1:
                         if pred_label_box not in count_labels2[orig_label]: count_labels2[orig_label][pred_label_box] = 0
                         if pred_label_box not in count_misclasses2[orig_label]: count_misclasses2[orig_label][pred_label_box] = 0
@@ -428,13 +441,18 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                         count_labels2[orig_label][pred_label_box] += 1
 
         max_misclass_diff = 0
+        max_evasion_diff = 0
+        max_misclass_rate = 0
         max_misclass_src = None
         max_misclass_tgt = None
         for src_cls in count_labels:
             for tgt_cls in count_labels[src_cls]:
+                #print(src_cls, tgt_cls)
                 if tgt_cls == src_cls: continue
                 if count_labels[src_cls][tgt_cls] < 2: continue
                 misclass_rate = count_misclasses[src_cls][tgt_cls] / count_labels[src_cls][tgt_cls]
+                if misclass_rate > max_misclass_rate:
+                    max_misclass_rate = misclass_rate
                 if tgt_cls not in count_labels2[src_cls]:
                     misclass_rate2 = 0
                 else:
@@ -450,8 +468,12 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                     max_misclass_src = src_cls
                     max_misclass_tgt = tgt_cls
                     count = count_labels[src_cls][tgt_cls]
+            evasion_diff = count_evasions[src_cls] - count_evasions2[src_cls]
+            if evasion_diff > max_evasion_diff:
+                max_evasion_diff = evasion_diff
+                max_evasion_src = src_cls
 
-        return max_misclass_diff#, max_success
+        return max_misclass_diff, max_evasion_diff, max_misclass_rate#, count_evasions[max(count_evasions)]
 
 def dist(b1, b2):
     return math.sqrt((b1[0] - b2[0])**2 + (b1[1] - b2[1])**2 + (b1[2] - b2[2])**2 + (b1[3] - b2[3])**2)
@@ -527,6 +549,59 @@ def get_logits(model, images, targets, original_image_sizes=None):
 
     return logits, None#confs.detach()
 
+def find_label(model, new_data, i, j, max_iter, epsilon, targets, src_box, src_label, fn, device):
+
+    src_box = torch.round(src_box).int()
+    original_image_sizes = []
+    val = new_data.shape[-2:]
+    original_image_sizes = [(val[0], val[1])]
+
+    filter_shape = torch.ones(new_data.shape).to(device)
+    filter_shape[:,:(src_box[1]+src_box[3])//2,:] = 0
+    #signed_grad[:,src_box[3]:,:] = 0
+    filter_shape[:,(src_box[1]+src_box[3])//2+50:,:] = 0
+    filter_shape[:,:,:(src_box[0]+src_box[2])//2] = 0
+    #signed_grad[:,:,src_box[2]:] = 0
+    filter_shape[:,:,(src_box[0]+src_box[2])//2+50:] = 0
+
+    for iter_i in range(max_iter):
+        new_data.requires_grad = True
+        logits, confs = get_logits(model, [new_data], targets, original_image_sizes)
+        if j < logits.shape[2]-9:
+            logit = logits[:,:,j] + logits[:,:,j+1] + logits[:,:,j+2] + logits[:,:,j+3] + logits[:,:,j+4] + logits[:,:,j+5] + logits[:,:,j+6] + logits[:,:,j+7] + logits[:,:,j+8] + logits[:,:,j+9]
+        if j == logits.shape[2]-2:
+            logit = logits[:,:,j] + logits[:,:,j+1]
+        if j == logits.shape[2]-1:
+            logit = logits[:,:,j]
+        gradients = torch.autograd.grad(outputs=logit, inputs=new_data, grad_outputs=torch.ones(logit.size()).to(device), only_inputs=True, retain_graph=True)[0]
+        signed_grad = torch.sign(gradients)
+        signed_grad = signed_grad * filter_shape
+        new_data.requires_grad = False
+        #new_data = new_data.detach()
+        new_data = new_data + (epsilon * signed_grad)
+
+    with torch.cuda.amp.autocast():
+        outputs = model([new_data], targets)
+    if isinstance(outputs, tuple):
+        outputs = outputs[1]
+    valid_score_indices = outputs[0]['scores']>0.12
+    #scores = outputs[0]['scores'][valid_score_indices]
+    labels = outputs[0]['labels'][valid_score_indices]
+    boxes = outputs[0]['boxes'][valid_score_indices]
+    box_i = None
+    mindist = 250
+    misclass_label = -1
+    fail2 = 1
+    for box, label in zip(boxes, labels):
+        d = dist(box, src_box)
+        #print(label, d, box)
+        if d < mindist and label.item() != src_label and label >= j and label < j+10:
+            mindist = d
+            misclass_label = label
+
+    #print(fail1, fail2) 
+    return misclass_label
+
 def generate_trigger(model, new_data, i, j, max_iter, epsilon, targets, src_box, src_label, fn, device):
 
     src_box = torch.round(src_box).int()
@@ -537,10 +612,10 @@ def generate_trigger(model, new_data, i, j, max_iter, epsilon, targets, src_box,
     filter_shape = torch.ones(new_data.shape).to(device)
     filter_shape[:,:(src_box[1]+src_box[3])//2,:] = 0
     #signed_grad[:,src_box[3]:,:] = 0
-    filter_shape[:,(src_box[1]+src_box[3])//2+100:,:] = 0
+    filter_shape[:,(src_box[1]+src_box[3])//2+50:,:] = 0
     filter_shape[:,:,:(src_box[0]+src_box[2])//2] = 0
     #signed_grad[:,:,src_box[2]:] = 0
-    filter_shape[:,:,(src_box[0]+src_box[2])//2+100:] = 0
+    filter_shape[:,:,(src_box[0]+src_box[2])//2+50:] = 0
 
     for iter_i in range(max_iter):
         new_data.requires_grad = True
@@ -575,12 +650,12 @@ def generate_trigger(model, new_data, i, j, max_iter, epsilon, targets, src_box,
     fail2 = 1
     for box, label in zip(boxes, labels):
         d = dist(box, src_box)
-        if d < 100 and label != src_label and label == j:
+        if d < 100 and label.item() != src_label and label.item() == j:
             fail1 = 1
             #print(d, label)
     for box, label in zip(boxes1, labels1):
         d = dist(box, src_box)
-        if d < 100 and label == j:
+        if d < 100 and label.item() != src_label and label.item() == j:
             fail2 = 0
     #print(fail1, fail2) 
     if fail1 and fail2:
@@ -589,6 +664,63 @@ def generate_trigger(model, new_data, i, j, max_iter, epsilon, targets, src_box,
     fail1 = 0
     fail2 = 1
 
+    return None, None
+
+def generate_evasive_trigger(model, new_data, i, j, max_iter, epsilon, targets, src_box, src_label, fn, device):
+
+    src_box = torch.round(src_box).int()
+    original_image_sizes = []
+    val = new_data.shape[-2:]
+    original_image_sizes = [(val[0], val[1])]
+
+    filter_shape = torch.ones(new_data.shape).to(device)
+    filter_shape[:,:(src_box[1]+src_box[3])//2,:] = 0
+    #signed_grad[:,src_box[3]:,:] = 0
+    filter_shape[:,(src_box[1]+src_box[3])//2+50:,:] = 0
+    filter_shape[:,:,:(src_box[0]+src_box[2])//2] = 0
+    #signed_grad[:,:,src_box[2]:] = 0
+    filter_shape[:,:,(src_box[0]+src_box[2])//2+50:] = 0
+
+    for iter_i in range(max_iter):
+        new_data.requires_grad = True
+        logits, confs = get_logits(model, [new_data], targets, original_image_sizes)
+        logit = logits[:,:,i]
+        gradients = torch.autograd.grad(outputs=logit, inputs=new_data, grad_outputs=torch.ones(logit.size()).to(device), only_inputs=True, retain_graph=True)[0]
+        signed_grad = torch.sign(gradients)
+        signed_grad = signed_grad * filter_shape
+        new_data.requires_grad = False
+        #new_data = new_data.detach()
+        new_data = new_data - (epsilon * signed_grad)
+
+    with torch.cuda.amp.autocast():
+        outputs = model([new_data], targets)
+    if isinstance(outputs, tuple):
+        outputs = outputs[1]
+    valid_score_indices = outputs[0]['scores']>0.12
+    #scores = outputs[0]['scores'][valid_score_indices]
+    labels = outputs[0]['labels'][valid_score_indices]
+    boxes = outputs[0]['boxes'][valid_score_indices]
+    with torch.cuda.amp.autocast():
+        outputs1 = model1([new_data], targets)
+    if isinstance(outputs1, tuple):
+        outputs1 = outputs1[1]
+    valid_score_indices = outputs1[0]['scores']>0.12
+    #scores1 = outputs1[0]['scores'][valid_score_indices]
+    labels1 = outputs1[0]['labels'][valid_score_indices]
+    boxes1 = outputs1[0]['boxes'][valid_score_indices]
+    #print(scores, labels, scores1, labels1) 
+    box_i = None
+    fail1 = 1
+    #fail2 = 0
+    for box, label in zip(boxes, labels):
+        d = dist(box, src_box)
+        #print(d, label)
+        if d < 100 and label == i:
+            fail1 = 0
+            #print(d, label)
+    if fail1:# and fail2:
+        return new_data, signed_grad.detach()
+        
     return None, None
 
 def crop_trigger(trigger, shape):

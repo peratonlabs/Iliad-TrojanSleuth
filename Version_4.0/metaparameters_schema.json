@@ -1,11 +1,11 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Algorithm Meta-Parameters",
-  "technique": "Technique name",
-  "technique_description": "Technique description",
-  "technique_changes": "Technique changes from submission to submission",
+  "technique": "Trigger reconstruction",
+  "technique_description": "Reconstruct trigger via gradient descent, test on additional images",
+  "technique_changes": "Runtime speedup, statistics for evasion triggers",
   "commit_id": "",
-  "repo_name": "https://github.com/usnistgov/trojai-example",
+  "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
   "required": [ "num_runs", "num_examples", "epsilon", "max_iter" ],
   "additionalProperties": false,
   "type": "object",
@@ -15,6 +15,7 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 10,
+      "suggested_minimum": 1,
       "suggested_maximum": 1
     },
     "num_examples": {
@@ -29,19 +30,25 @@
       "description": "Gradient descent step size",
       "type": "number",
       "minimim": 0.0,
-      "maximum": 1.0
+      "maximum": 1.0,
+      "suggested_minimum": 0.1,
+      "suggested_maximum": 0.5
     },
     "max_iter": {
       "description": "Maximum number of steps of gradient descent",
       "type": "integer",
       "minimim": 1,
-      "maximum": 100
+      "maximum": 100,
+      "suggested_minimum": 1,
+      "suggested_maximum": 20
     },
     "add_delta": {
       "description": "Add a delta instead of replace pixels",
       "type": "integer",
       "minimim": 0,
-      "maximum": 1
+      "maximum": 1,
+      "suggested_minimum": 0,
+      "suggested_maximum": 1
     }
   }
 }
