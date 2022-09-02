@@ -3,28 +3,28 @@
   "title": "Algorithm Meta-Parameters",
   "technique": "Trigger reconstruction",
   "technique_description": "Reconstruct trigger via gradient descent, test on additional images",
-  "technique_changes": "Runtime speedup, statistics for evasion triggers",
-  "commit_id": "",
+  "technique_changes": "Refined parameter values, more configurable parameters added, changed qualifications for misclassification statistics",
+  "commit_id": "95a062bfb6c47739c11ceef4819cc196471e7110",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
-  "required": [ "num_runs", "num_examples", "epsilon", "max_iter" ],
+  "required": [ "num_runs", "num_examples", "epsilon", "max_iter", "add_delta", "object_threshold", "trigger_size", "find_label_dist", "misclassification_dist" ],
   "additionalProperties": false,
   "type": "object",
   "properties": {
     "num_runs": {
-      "description": "The first parameter",
+      "description": "Number of times to run trigger reconstruction. Too slow, keep at one.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 10,
+      "maximum": 1,
       "suggested_minimum": 1,
       "suggested_maximum": 1
     },
     "num_examples": {
-      "description": "The second parameter, marked with suggested to indicate that modifying its value will likely impact the result, and the parameter value can be optimized within the suggested range",
+      "description": "Number of example images to use during feature generation",
       "type": "integer",
       "minimum": 1,
       "maximum": 10,
-      "suggested_minimum": 1,
-      "suggested_maximum": 2
+      "suggested_minimum": 3,
+      "suggested_maximum": 10
     },
     "epsilon": {
       "description": "Gradient descent step size",
@@ -43,12 +43,52 @@
       "suggested_maximum": 20
     },
     "add_delta": {
-      "description": "Add a delta instead of replace pixels",
+      "description": "If 1, trigger is made by adding a delta instead of replacing pixels",
       "type": "integer",
       "minimim": 0,
       "maximum": 1,
       "suggested_minimum": 0,
-      "suggested_maximum": 1
+      "suggested_maximum": 0
+    },
+    "object_threshold": {
+      "description": "Confidence threshold for whether an object was detected",
+      "type": "number",
+      "minimim": 0,
+      "maximum": 0.99,
+      "suggested_minimum": 0.10,
+      "suggested_maximum": 0.50
+    },
+    "trigger_size": {
+      "description": "Size of pixel patch / trigger (l x l)",
+      "type": "integer",
+      "minimim": 1,
+      "maximum": 500,
+      "suggested_minimum": 10,
+      "suggested_maximum": 250
+    },
+    "find_label_dist": {
+      "description": "Minimum distance between detected object and ground truth source object to assume the model has misclassified the source object (for determining target class)",
+      "type": "integer",
+      "minimim": 10,
+      "maximum": 500,
+      "suggested_minimum": 50,
+      "suggested_maximum": 250
+    },
+    "misclassification_dist": {
+      "description": "Minimum distance between detected object and ground truth source object to assume the model has misclassified the source object (for determining whether trigger is valid)",
+      "type": "integer",
+      "minimim": 10,
+      "maximum": 500,
+      "suggested_minimum": 50,
+      "suggested_maximum": 250
+    },
+    "feature_dist": {
+      "description": "Minimum distance between detected object and ground truth source object to assume the model has misclassified the source object (for generating misclassifacation/evasion statistics)",
+      "type": "integer",
+      "minimim": 10,
+      "maximum": 500,
+      "suggested_minimum": 50,
+      "suggested_maximum": 250
     }
   }
 }

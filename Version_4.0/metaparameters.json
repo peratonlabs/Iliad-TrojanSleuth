@@ -1,7 +1,12 @@
 {
   "num_runs": 1,
-  "num_examples": 1,
+  "num_examples": 3,
   "epsilon": 0.1,
-  "max_iter": 10,
-  "add_delta": 0
+  "max_iter": 5,
+  "add_delta": 0,
+  "object_threshold": 0.12,
+  "trigger_size": 30,
+  "find_label_dist": 250,
+  "misclassification_dist" : 100,
+  "feature_dist": 50
 }

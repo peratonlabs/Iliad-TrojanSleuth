@@ -90,7 +90,12 @@ def trojan_detector(model_filepath,
                             num_examples,
                             epsilon,
                             max_iter,
-                            add_delta):
+                            add_delta,
+                            object_threshold,
+                            trigger_size,
+                            find_label_dist,
+                            misclassification_dist,
+                            feature_dist):
     
     logging.info('model_filepath = {}'.format(model_filepath))
     logging.info('result_filepath = {}'.format(result_filepath))
@@ -100,8 +105,6 @@ def trojan_detector(model_filepath,
     logging.info('round_training_dataset_dirpath = {}'.format(round_training_dataset_dirpath))
 
     logging.info('Using parameters_dirpath = {}'.format(parameters_dirpath))
-    logging.info('Using num_runs = {}'.format(str(num_runs)))
-    logging.info('Using num_examples = {}'.format(str(num_examples)))
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     logging.info("Using compute device: {}".format(device))
@@ -112,11 +115,7 @@ def trojan_detector(model_filepath,
     model.to(device)
     model.eval()
     
-    # Inference the example images in data
-    fns = [os.path.join(examples_dirpath, fn) for fn in os.listdir(examples_dirpath) if fn.endswith('.jpg')]
-    fns.sort()
-    
-    features = list(gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta))
+    features = list(gen_features(model, model_filepath, round_training_dataset_dirpath, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta, object_threshold, trigger_size, find_label_dist, misclassification_dist, feature_dist))
     #print(features)
             
     clf = load(os.path.join(parameters_dirpath, "clf.joblib"))
@@ -135,7 +134,12 @@ def configure(source_dataset_dirpath,
               num_examples,
               epsilon,
               max_iter,
-              add_delta):
+              add_delta,
+              object_threshold,
+              trigger_size,
+              find_label_dist,
+              misclassification_dist,
+              feature_dist):
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
@@ -165,11 +169,7 @@ def configure(source_dataset_dirpath,
         model.to(device)
         model.eval()
         
-        # Inference the example images in data
-        fns = [os.path.join(examples_dirpath, fn) for fn in os.listdir(examples_dirpath) if fn.endswith('.jpg')]
-        fns.sort()
-        
-        feature_vector = list(gen_features(model, model_filepath, source_dataset_dirpath, fns, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta))
+        feature_vector = list(gen_features(model, model_filepath, source_dataset_dirpath, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta, object_threshold, trigger_size, find_label_dist, misclassification_dist, feature_dist))
         #print(feature_vector)
         features.append(feature_vector)
         
@@ -189,7 +189,7 @@ def configure(source_dataset_dirpath,
     dump(scaler, os.path.join(output_parameters_dirpath, "scaler.joblib"))
     dump(model, os.path.join(output_parameters_dirpath, "clf.joblib"))
     
-def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta):
+def gen_features(model, model_filepath, round_training_dataset_dirpath, coco_dirpath, device, num_runs, num_examples, epsilon, max_iter, add_delta, object_threshold, trigger_size, find_label_dist, misclassification_dist, feature_dist):
 
     if isinstance(model, models.SSD) or isinstance(model, torchvision.models.detection.ssd.SSD):
         ssd(device, round_training_dataset_dirpath)
@@ -203,20 +203,15 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
         trigger_fns = []
         src_classes = []
 
-        # iterate over the example images
-        logging.info("Iterating over the examples, performing inference")
         for image_class_dirpath in os.listdir(coco_dirpath):
             #if int(image_class_dirpath) != 74: continue
-            #if int(image_class_dirpath) %3 != 1: continue
             fns = [os.path.join(coco_dirpath, image_class_dirpath, fn) for fn in os.listdir(os.path.join(coco_dirpath, image_class_dirpath)) if fn.endswith('.jpg')]
             fns.sort()
             for fn_i, fn in enumerate(sorted(fns)):
-                if fn_i >= num_examples:
+                if fn_i >= 1:
                     continue
 
                 images, targets = get_targets(fn, device)
-                #images[0].requires_grad = True
-                logits, confs = get_logits(model, images, targets)
 
                 with torch.no_grad():
                     outputs = model(images, targets)
@@ -231,8 +226,6 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                 boxes = targets[0]["boxes"]
                 predicted_labels = outputs[0]['labels']
                 predicted_scores = outputs[0]['scores']
-                #triggers = []
-                #tgts = []
                 i2 = int(image_class_dirpath)
                 
                 for j in range(-10, 90):
@@ -257,13 +250,11 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                         #og_img.show()
                         visualize_image('og.png', None, True, True, model_filepath)
 
-                    object_count = list(labels).count(j)
-
-                    misclassify_j = find_label(model, new_data, None, j, max_iter, epsilon, targets, src_box, i2, fn, device)
+                    misclassify_j = find_label(model, new_data, None, j, max_iter, epsilon, trigger_size, find_label_dist, object_threshold, targets, src_box, i2, fn, device)
                     if j == -10:
-                        new_data, signed_grad = generate_evasive_trigger(model, new_data, i2, None, max_iter, epsilon, targets, src_box, i2, fn, device)
+                        new_data, signed_grad = generate_evasive_trigger(model, new_data, i2, None, max_iter, epsilon, trigger_size, misclassification_dist, object_threshold, targets, src_box, i2, fn, device)
                     if j >= 0 :
-                        new_data, signed_grad = generate_trigger(model, new_data, None, misclassify_j, max_iter, epsilon, targets, src_box, i2, fn, device)
+                        new_data, signed_grad = generate_trigger(model, new_data, None, misclassify_j, max_iter, epsilon, trigger_size, misclassification_dist, object_threshold, targets, src_box, i2, fn, device)
                     if signed_grad == None:
                         continue           
                     #f list(labels2).count(j) <= object_count:
@@ -276,7 +267,7 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                         trigger, (x0,y0,x1,y1) = crop_trigger(trigger, images[0].shape)
                     #trigger = trigger[:,:50,:50]
                     triggers.append(trigger.detach())
-                    tgts.append(j)
+                    tgts.append(misclassify_j)
                     trigger_fns.append(fn)
                     src_classes.append(image_class_dirpath)
                             
@@ -329,7 +320,7 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                 
                 if fn2==fn: continue
 
-                if fn2_i > num_examples + 3:
+                if fn2_i > num_examples + 1:
                     continue
                 #print(fn2, fn)
                 images2, targets2 = get_targets(fn2, device)
@@ -344,7 +335,7 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                 boxes3 = targets2[0]['boxes'][:10]#outputs[0]['boxes'][valid_score_indices]
                 
 
-                valid_score_indices = outputs[0]['scores']>0.2
+                valid_score_indices = outputs[0]['scores']>object_threshold
                 predicted_scores3 = outputs[0]['scores'][valid_score_indices]
                 predicted_labels3 = outputs[0]['labels'][valid_score_indices]
                 predicted_boxes3 = outputs[0]['boxes'][valid_score_indices]
@@ -377,7 +368,7 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                     if isinstance(outputs, tuple):
                         outputs = outputs[1]
                         
-                    valid_score_indices = outputs[0]['scores']>0.2
+                    valid_score_indices = outputs[0]['scores']>object_threshold
                     predicted_scores4 = outputs[0]['scores'][valid_score_indices]
                     predicted_labels4 = outputs[0]['labels'][valid_score_indices]
                     predicted_boxes4 = outputs[0]['boxes'][valid_score_indices]
@@ -390,16 +381,18 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                         #og_img.show()
                         visualize_image('add.png', None, True, True, model_filepath)
                         
-                    min_dist = 1000
+                    min_dist = feature_dist
+                    detected = False
                     pred_label_box = -1
-                    for pred_box, pred_label in zip(predicted_boxes4, predicted_labels4):
-                        #print(pred_box, orig_box)
+                    for pred_box, pred_label, pred_score in zip(predicted_boxes4, predicted_labels4, predicted_scores4):
                         d = dist(pred_box, orig_box)
-                        if d < 50 and d < min_dist:
-                            min_dist = d
-                            pred_label_box = pred_label.item()
+                        if d < min_dist:
+                            detected = True
+                            if pred_label.item() != orig_label:
+                                min_dist = d
+                                pred_label_box = pred_label.item()
                     #print(pred_label_box, orig_label)
-                    if pred_label_box == -1:
+                    if not detected:
                         count_evasions[orig_label] += 1
                     if pred_label_box != -1:
                         if pred_label_box not in count_labels[orig_label]: count_labels[orig_label][pred_label_box] = 0
@@ -415,20 +408,21 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, fns, coc
                     if isinstance(outputs, tuple):
                         outputs = outputs[1]
                     
-                    valid_score_indices = outputs[0]['scores']>0.2
+                    valid_score_indices = outputs[0]['scores']>object_threshold
                     predicted_labels4 = outputs[0]['labels'][valid_score_indices]
                     predicted_boxes4 = outputs[0]['boxes'][valid_score_indices]
                         
-                    min_dist = 1000
+                    min_dist = feature_dist
+                    detected = False
                     pred_label_box = -1
                     for pred_box, pred_label in zip(predicted_boxes4, predicted_labels4):
-                        #print(pred_box, orig_box)
                         d = dist(pred_box, orig_box)
-                        if d < 50 and d < min_dist:
-                            min_dist = d
-                            pred_label_box = pred_label.item()
-                    #print(pred_label_box, orig_label)
-                    if pred_label_box == -1:
+                        if d < min_dist:
+                            detected = True
+                            if pred_label.item() != orig_label:
+                                min_dist = d
+                                pred_label_box = pred_label.item()
+                    if not detected:
                         count_evasions2[orig_label] += 1
                     if pred_label_box != -1:
                         if pred_label_box not in count_labels2[orig_label]: count_labels2[orig_label][pred_label_box] = 0
@@ -549,7 +543,7 @@ def get_logits(model, images, targets, original_image_sizes=None):
 
     return logits, None#confs.detach()
 
-def find_label(model, new_data, i, j, max_iter, epsilon, targets, src_box, src_label, fn, device):
+def find_label(model, new_data, i, j, max_iter, epsilon, trigger_size, find_label_dist, object_threshold, targets, src_box, src_label, fn, device):
 
     src_box = torch.round(src_box).int()
     original_image_sizes = []
@@ -558,11 +552,9 @@ def find_label(model, new_data, i, j, max_iter, epsilon, targets, src_box, src_l
 
     filter_shape = torch.ones(new_data.shape).to(device)
     filter_shape[:,:(src_box[1]+src_box[3])//2,:] = 0
-    #signed_grad[:,src_box[3]:,:] = 0
-    filter_shape[:,(src_box[1]+src_box[3])//2+50:,:] = 0
+    filter_shape[:,(src_box[1]+src_box[3])//2+trigger_size:,:] = 0
     filter_shape[:,:,:(src_box[0]+src_box[2])//2] = 0
-    #signed_grad[:,:,src_box[2]:] = 0
-    filter_shape[:,:,(src_box[0]+src_box[2])//2+50:] = 0
+    filter_shape[:,:,(src_box[0]+src_box[2])//2+trigger_size:] = 0
 
     for iter_i in range(max_iter):
         new_data.requires_grad = True
@@ -584,25 +576,22 @@ def find_label(model, new_data, i, j, max_iter, epsilon, targets, src_box, src_l
         outputs = model([new_data], targets)
     if isinstance(outputs, tuple):
         outputs = outputs[1]
-    valid_score_indices = outputs[0]['scores']>0.12
-    #scores = outputs[0]['scores'][valid_score_indices]
+    valid_score_indices = outputs[0]['scores']>object_threshold
     labels = outputs[0]['labels'][valid_score_indices]
     boxes = outputs[0]['boxes'][valid_score_indices]
     box_i = None
-    mindist = 250
+    mindist = find_label_dist
     misclass_label = -1
     fail2 = 1
     for box, label in zip(boxes, labels):
         d = dist(box, src_box)
-        #print(label, d, box)
         if d < mindist and label.item() != src_label and label >= j and label < j+10:
             mindist = d
             misclass_label = label
 
-    #print(fail1, fail2) 
     return misclass_label
 
-def generate_trigger(model, new_data, i, j, max_iter, epsilon, targets, src_box, src_label, fn, device):
+def generate_trigger(model, new_data, i, j, max_iter, epsilon, trigger_size, misclassification_dist, object_threshold, targets, src_box, src_label, fn, device):
 
     src_box = torch.round(src_box).int()
     original_image_sizes = []
@@ -611,11 +600,9 @@ def generate_trigger(model, new_data, i, j, max_iter, epsilon, targets, src_box,
 
     filter_shape = torch.ones(new_data.shape).to(device)
     filter_shape[:,:(src_box[1]+src_box[3])//2,:] = 0
-    #signed_grad[:,src_box[3]:,:] = 0
-    filter_shape[:,(src_box[1]+src_box[3])//2+50:,:] = 0
+    filter_shape[:,(src_box[1]+src_box[3])//2+trigger_size:,:] = 0
     filter_shape[:,:,:(src_box[0]+src_box[2])//2] = 0
-    #signed_grad[:,:,src_box[2]:] = 0
-    filter_shape[:,:,(src_box[0]+src_box[2])//2+50:] = 0
+    filter_shape[:,:,(src_box[0]+src_box[2])//2+trigger_size:] = 0
 
     for iter_i in range(max_iter):
         new_data.requires_grad = True
@@ -632,32 +619,27 @@ def generate_trigger(model, new_data, i, j, max_iter, epsilon, targets, src_box,
         outputs = model([new_data], targets)
     if isinstance(outputs, tuple):
         outputs = outputs[1]
-    valid_score_indices = outputs[0]['scores']>0.12
-    #scores = outputs[0]['scores'][valid_score_indices]
+    valid_score_indices = outputs[0]['scores']>object_threshold
     labels = outputs[0]['labels'][valid_score_indices]
     boxes = outputs[0]['boxes'][valid_score_indices]
     with torch.cuda.amp.autocast():
         outputs1 = model1([new_data], targets)
     if isinstance(outputs1, tuple):
         outputs1 = outputs1[1]
-    valid_score_indices = outputs1[0]['scores']>0.12
-    #scores1 = outputs1[0]['scores'][valid_score_indices]
+    valid_score_indices = outputs1[0]['scores']>object_threshold
     labels1 = outputs1[0]['labels'][valid_score_indices]
     boxes1 = outputs1[0]['boxes'][valid_score_indices]
-    #print(scores, labels, scores1, labels1) 
     box_i = None
     fail1 = 0
     fail2 = 1
     for box, label in zip(boxes, labels):
         d = dist(box, src_box)
-        if d < 100 and label.item() != src_label and label.item() == j:
+        if d < misclassification_dist and label.item() != src_label and label.item() == j:
             fail1 = 1
-            #print(d, label)
     for box, label in zip(boxes1, labels1):
         d = dist(box, src_box)
-        if d < 100 and label.item() != src_label and label.item() == j:
+        if d < misclassification_dist and label.item() != src_label and label.item() == j:
             fail2 = 0
-    #print(fail1, fail2) 
     if fail1 and fail2:
         return new_data, signed_grad.detach()
         
@@ -666,7 +648,7 @@ def generate_trigger(model, new_data, i, j, max_iter, epsilon, targets, src_box,
 
     return None, None
 
-def generate_evasive_trigger(model, new_data, i, j, max_iter, epsilon, targets, src_box, src_label, fn, device):
+def generate_evasive_trigger(model, new_data, i, j, max_iter, epsilon, trigger_size, misclassification_dist, object_threshold, targets, src_box, src_label, fn, device):
 
     src_box = torch.round(src_box).int()
     original_image_sizes = []
@@ -676,10 +658,10 @@ def generate_evasive_trigger(model, new_data, i, j, max_iter, epsilon, targets, 
     filter_shape = torch.ones(new_data.shape).to(device)
     filter_shape[:,:(src_box[1]+src_box[3])//2,:] = 0
     #signed_grad[:,src_box[3]:,:] = 0
-    filter_shape[:,(src_box[1]+src_box[3])//2+50:,:] = 0
+    filter_shape[:,(src_box[1]+src_box[3])//2+trigger_size:,:] = 0
     filter_shape[:,:,:(src_box[0]+src_box[2])//2] = 0
     #signed_grad[:,:,src_box[2]:] = 0
-    filter_shape[:,:,(src_box[0]+src_box[2])//2+50:] = 0
+    filter_shape[:,:,(src_box[0]+src_box[2])//2+trigger_size:] = 0
 
     for iter_i in range(max_iter):
         new_data.requires_grad = True
@@ -696,7 +678,7 @@ def generate_evasive_trigger(model, new_data, i, j, max_iter, epsilon, targets, 
         outputs = model([new_data], targets)
     if isinstance(outputs, tuple):
         outputs = outputs[1]
-    valid_score_indices = outputs[0]['scores']>0.12
+    valid_score_indices = outputs[0]['scores']>object_threshold
     #scores = outputs[0]['scores'][valid_score_indices]
     labels = outputs[0]['labels'][valid_score_indices]
     boxes = outputs[0]['boxes'][valid_score_indices]
@@ -704,7 +686,7 @@ def generate_evasive_trigger(model, new_data, i, j, max_iter, epsilon, targets, 
         outputs1 = model1([new_data], targets)
     if isinstance(outputs1, tuple):
         outputs1 = outputs1[1]
-    valid_score_indices = outputs1[0]['scores']>0.12
+    valid_score_indices = outputs1[0]['scores']>object_threshold
     #scores1 = outputs1[0]['scores'][valid_score_indices]
     labels1 = outputs1[0]['labels'][valid_score_indices]
     boxes1 = outputs1[0]['boxes'][valid_score_indices]
@@ -715,7 +697,7 @@ def generate_evasive_trigger(model, new_data, i, j, max_iter, epsilon, targets, 
     for box, label in zip(boxes, labels):
         d = dist(box, src_box)
         #print(d, label)
-        if d < 100 and label == i:
+        if d < misclassification_dist and label == i:
             fail1 = 0
             #print(d, label)
     if fail1:# and fail2:
@@ -741,12 +723,6 @@ def crop_trigger(trigger, shape):
     y1 = shape[1] + y1
     
     return trigger[:,y0:y1,x0:x1], (x0,y0,x1,y1)
-
-def target_object(signed_grad, src_box):
-    signed_grad[:src_box[0],:] = 0
-    signed_grad[src_box[2]:,:] = 0
-    signed_grad[:src_box[1],:] = 0
-    signed_grad[src_box[3]:,:] = 0
 
 def compute_mAP(coco_dataset_filepath: str, coco_annotation_filepath: str, model_filepath: str):
     coco_dataset = torchvision.datasets.CocoDetection(root=coco_dataset_filepath, annFile=coco_annotation_filepath)
@@ -1015,7 +991,8 @@ def train_model(data):
     clf_svm = SVC(probability=True, kernel='rbf')
     clf_svm = GridSearchCV(clf_svm, parameters)
     sc = StandardScaler()
-    clf = clf_svm.fit(sc.fit_transform(X), y)
+    sc.fit(X)
+    clf = clf_svm.fit(X, y)
 
     return clf, sc
 
@@ -1045,6 +1022,11 @@ if __name__ == "__main__":
     parser.add_argument('--epsilon', type=float, help='Gradient descent step size.')
     parser.add_argument('--max_iter', type=int, help='Maximum number of steps of gradient descent.')
     parser.add_argument('--add_delta', type=int, help='Add a quasi-trigger.')
+    parser.add_argument('--object_threshold', type=float, help='Confidence threshold for whether an object was detected.')
+    parser.add_argument('--trigger_size', type=int, help='Size of pixel patch (l x l).')
+    parser.add_argument('--find_label_dist', type=int, help='Minimum distance to assume the model has misclassified the source object (for determining target class).')
+    parser.add_argument('--misclassification_dist', type=int, help='Minimum distance to assume the model has misclassified the source object (for determining whether trigger is valid).')
+    parser.add_argument('--feature_dist', type=int, help='Minimum distance to assume the model has misclassified the source object (for generating misclassifacation/evasion statistics).')
 
     args = parser.parse_args()
 
@@ -1079,7 +1061,12 @@ if __name__ == "__main__":
             args.num_examples is not None and
             args.epsilon is not None and
             args.max_iter is not None and
-            args.add_delta is not None):
+            args.add_delta is not None and
+            args.object_threshold is not None and
+            args.trigger_size is not None and
+            args.find_label_dist is not None and
+            args.misclassification_dist is not None and
+            args.feature_dist is not None):
 
             logging.info("Calling the trojan detector")
             trojan_detector(args.model_filepath,
@@ -1094,7 +1081,12 @@ if __name__ == "__main__":
                                     args.num_examples,
                                     args.epsilon,
                                     args.max_iter,
-                                    args.add_delta)
+                                    args.add_delta,
+                                    args.object_threshold,
+                                    args.trigger_size,
+                                    args.find_label_dist,
+                                    args.misclassification_dist,
+                                    args.feature_dist)
         else:
             logging.info("Required Evaluation-Mode parameters missing!")
     else:
@@ -1105,7 +1097,12 @@ if __name__ == "__main__":
             args.num_examples is not None and
             args.max_iter is not None and
             args.epsilon is not None and
-            args.add_delta is not None):
+            args.add_delta is not None,
+            args.object_threshold is not None and
+            args.trigger_size is not None and
+            args.find_label_dist is not None and
+            args.misclassification_dist is not None and
+            args.feature_dist is not None):
 
             logging.info("Calling configuration mode")
             # all 3 example parameters will be loaded here, but we only use parameter3
@@ -1117,7 +1114,12 @@ if __name__ == "__main__":
                       args.num_examples,
                       args.epsilon,
                       args.max_iter,
-                      args.add_delta)
+                      args.add_delta,
+                      args.object_threshold,
+                      args.trigger_size,
+                      args.find_label_dist,
+                      args.misclassification_dist,
+                      args.feature_dist)
         else:
             logging.info("Required Configure-Mode parameters missing!")
 
