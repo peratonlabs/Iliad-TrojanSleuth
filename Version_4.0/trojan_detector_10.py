@@ -443,7 +443,7 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, coco_dir
             for tgt_cls in count_labels[src_cls]:
                 #print(src_cls, tgt_cls)
                 if tgt_cls == src_cls: continue
-                if count_labels[src_cls][tgt_cls] < 2: continue
+                if count_labels[src_cls][tgt_cls] < 4: continue
                 misclass_rate = count_misclasses[src_cls][tgt_cls] / count_labels[src_cls][tgt_cls]
                 if misclass_rate > max_misclass_rate:
                     max_misclass_rate = misclass_rate

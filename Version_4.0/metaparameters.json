@@ -1,6 +1,6 @@
 {
   "num_runs": 1,
-  "num_examples": 3,
+  "num_examples": 6,
   "epsilon": 0.1,
   "max_iter": 5,
   "add_delta": 0,

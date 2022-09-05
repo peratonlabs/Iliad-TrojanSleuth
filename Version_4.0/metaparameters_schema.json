@@ -3,8 +3,8 @@
   "title": "Algorithm Meta-Parameters",
   "technique": "Trigger reconstruction",
   "technique_description": "Reconstruct trigger via gradient descent, test on additional images",
-  "technique_changes": "Refined parameter values, more configurable parameters added, changed qualifications for misclassification statistics",
-  "commit_id": "95a062bfb6c47739c11ceef4819cc196471e7110",
+  "technique_changes": "Refined parameter values",
+  "commit_id": "4a3d5578e6974c5afc4e13f05b741b9ee7584037",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
   "required": [ "num_runs", "num_examples", "epsilon", "max_iter", "add_delta", "object_threshold", "trigger_size", "find_label_dist", "misclassification_dist" ],
   "additionalProperties": false,
@@ -48,7 +48,7 @@
       "minimim": 0,
       "maximum": 1,
       "suggested_minimum": 0,
-      "suggested_maximum": 0
+      "suggested_maximum": 1
     },
     "object_threshold": {
       "description": "Confidence threshold for whether an object was detected",
