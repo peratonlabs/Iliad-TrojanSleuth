@@ -16,6 +16,7 @@ import jsonpickle
 from joblib import load, dump
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from collections import OrderedDict
 import logging
@@ -987,12 +988,13 @@ def train_model(data):
     X = data[:,:-1].astype(np.float32)
     y = data[:,-1]
 
-    parameters = {'gamma':[0.01, 0.1], 'C':[1, 10]}
-    clf_svm = SVC(probability=True, kernel='rbf')
-    clf_svm = GridSearchCV(clf_svm, parameters)
+    #parameters = {'gamma':[0.01, 0.1], 'C':[1, 10]}
+    #clf_svm = SVC(probability=True, kernel='rbf')
+    #clf_svm = GridSearchCV(clf_svm, parameters)
+    clf_lr = LogisticRegression()
     sc = StandardScaler()
     sc.fit(X)
-    clf = clf_svm.fit(X, y)
+    clf = clf_lr.fit(X, y)
 
     return clf, sc
 
