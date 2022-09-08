@@ -1019,7 +1019,6 @@ if __name__ == "__main__":
     parser.add_argument('--configure_models_dirpath', type=str, help='Path to a directory containing models to use when in configure mode.')
 
     # these parameters need to be defined here, but their values will be loaded from the json file instead of the command line
-    parser.add_argument('--num_runs', type=int, help='An example tunable parameter.')
     parser.add_argument('--num_examples', type=int, help='An example tunable parameter.')
     parser.add_argument('--epsilon', type=float, help='Gradient descent step size.')
     parser.add_argument('--max_iter', type=int, help='Maximum number of steps of gradient descent.')
@@ -1038,6 +1037,7 @@ if __name__ == "__main__":
     
     #coco_dirpath = "round10-train-dataset/data"
     coco_dirpath = "/data"
+    num_runs = 1
 
     # Validate config file against schema
     if args.metaparameters_filepath is not None:
@@ -1059,7 +1059,6 @@ if __name__ == "__main__":
             args.source_dataset_dirpath is not None and
             args.round_training_dataset_dirpath is not None and
             args.learned_parameters_dirpath is not None and
-            args.num_runs is not None and
             args.num_examples is not None and
             args.epsilon is not None and
             args.max_iter is not None and
@@ -1079,7 +1078,7 @@ if __name__ == "__main__":
                                     args.source_dataset_dirpath,
                                     args.round_training_dataset_dirpath,
                                     args.learned_parameters_dirpath,
-                                    args.num_runs,
+                                    num_runs,
                                     args.num_examples,
                                     args.epsilon,
                                     args.max_iter,
@@ -1095,7 +1094,6 @@ if __name__ == "__main__":
         if (args.source_dataset_dirpath is not None and
             args.learned_parameters_dirpath is not None and
             args.configure_models_dirpath is not None and
-            args.num_runs is not None and
             args.num_examples is not None and
             args.max_iter is not None and
             args.epsilon is not None and
@@ -1112,7 +1110,7 @@ if __name__ == "__main__":
                       args.learned_parameters_dirpath,
                       args.configure_models_dirpath,
                       coco_dirpath,
-                      args.num_runs,
+                      num_runs,
                       args.num_examples,
                       args.epsilon,
                       args.max_iter,
@@ -1124,6 +1122,5 @@ if __name__ == "__main__":
                       args.feature_dist)
         else:
             logging.info("Required Configure-Mode parameters missing!")
-
 
 

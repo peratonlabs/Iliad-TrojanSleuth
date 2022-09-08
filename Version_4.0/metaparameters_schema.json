@@ -3,21 +3,13 @@
   "title": "Algorithm Meta-Parameters",
   "technique": "Trigger reconstruction",
   "technique_description": "Reconstruct trigger via gradient descent, test on additional images, collect misclassification and evasion statistics",
-  "technique_changes": "Logistic regression instead of SVM for classifier",
+  "technique_changes": "Smaller trigger",
   "commit_id": "4a3d5578e6974c5afc4e13f05b741b9ee7584037",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
-  "required": [ "num_runs", "num_examples", "epsilon", "max_iter", "add_delta", "object_threshold", "trigger_size", "find_label_dist", "misclassification_dist" ],
+  "required": [ "num_examples", "epsilon", "max_iter", "add_delta", "object_threshold", "trigger_size", "find_label_dist", "misclassification_dist" ],
   "additionalProperties": false,
   "type": "object",
   "properties": {
-    "num_runs": {
-      "description": "Number of times to run trigger reconstruction. Too slow, keep at one.",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 1,
-      "suggested_minimum": 1,
-      "suggested_maximum": 1
-    },
     "num_examples": {
       "description": "Number of example images to use during feature generation",
       "type": "integer",

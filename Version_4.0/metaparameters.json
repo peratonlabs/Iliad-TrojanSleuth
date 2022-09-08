@@ -5,7 +5,7 @@
   "max_iter": 5,
   "add_delta": 0,
   "object_threshold": 0.12,
-  "trigger_size": 20,
+  "trigger_size": 10,
   "find_label_dist": 250,
   "misclassification_dist" : 100,
   "feature_dist": 50
