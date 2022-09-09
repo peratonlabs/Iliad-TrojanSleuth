@@ -3,7 +3,7 @@
   "title": "Algorithm Meta-Parameters",
   "technique": "Trigger reconstruction",
   "technique_description": "Reconstruct trigger via gradient descent, test on additional images, collect misclassification and evasion statistics",
-  "technique_changes": "Smaller trigger",
+  "technique_changes": "Optimized logistic regression parameters",
   "commit_id": "4a3d5578e6974c5afc4e13f05b741b9ee7584037",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
   "required": [ "num_examples", "epsilon", "max_iter", "add_delta", "object_threshold", "trigger_size", "find_label_dist", "misclassification_dist" ],

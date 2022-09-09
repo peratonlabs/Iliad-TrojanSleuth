@@ -120,7 +120,8 @@ def trojan_detector(model_filepath,
     #print(features)
             
     clf = load(os.path.join(parameters_dirpath, "clf.joblib"))
-    trojan_probability = clf.predict_proba(np.array(features).reshape(1,-1))[0][1]
+    scaler = load(os.path.join(parameters_dirpath, "scaler.joblib"))
+    trojan_probability = clf.predict_proba(scaler.transform(np.array(features).reshape(1,-1)))[0][1]
 
     logging.info('Trojan Probability: {}'.format(trojan_probability))
 
@@ -468,7 +469,7 @@ def gen_features(model, model_filepath, round_training_dataset_dirpath, coco_dir
                 max_evasion_diff = evasion_diff
                 max_evasion_src = src_cls
 
-        return max_misclass_diff, max_evasion_diff, max_misclass_rate#, count_evasions[max(count_evasions)]
+        return max_misclass_diff, max_evasion_diff#, max_misclass_rate#, count_evasions[max(count_evasions)]
 
 def dist(b1, b2):
     return math.sqrt((b1[0] - b2[0])**2 + (b1[1] - b2[1])**2 + (b1[2] - b2[2])**2 + (b1[3] - b2[3])**2)
@@ -991,10 +992,9 @@ def train_model(data):
     #parameters = {'gamma':[0.01, 0.1], 'C':[1, 10]}
     #clf_svm = SVC(probability=True, kernel='rbf')
     #clf_svm = GridSearchCV(clf_svm, parameters)
-    clf_lr = LogisticRegression()
+    clf_lr = LogisticRegression(solver='liblinear', intercept_scaling=1.5, C=10)
     sc = StandardScaler()
-    sc.fit(X)
-    clf = clf_lr.fit(X, y)
+    clf = clf_lr.fit(sc.fit_transform(X), y)
 
     return clf, sc
 
