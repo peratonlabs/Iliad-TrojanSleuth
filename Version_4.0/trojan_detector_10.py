@@ -992,7 +992,7 @@ def train_model(data):
     #parameters = {'gamma':[0.01, 0.1], 'C':[1, 10]}
     #clf_svm = SVC(probability=True, kernel='rbf')
     #clf_svm = GridSearchCV(clf_svm, parameters)
-    clf_lr = LogisticRegression(solver='liblinear', intercept_scaling=1.5, C=10)
+    clf_lr = LogisticRegression()
     sc = StandardScaler()
     clf = clf_lr.fit(sc.fit_transform(X), y)
 
