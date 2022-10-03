@@ -1,0 +1,10 @@
+{
+  "num_examples": 7,
+  "epsilon": 0.025,
+  "max_iter": 10,
+  "add_delta": 1,
+  "trigger_size": 20,
+  "find_label_dist": 2,
+  "misclassification_dist" : 2,
+  "feature_dist": 3
+}

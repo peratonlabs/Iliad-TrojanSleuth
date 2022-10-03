@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Algorithm Meta-Parameters",
+  "technique": "Trigger reconstruction",
+  "technique_description": "Reconstruct trigger via gradient descent, test on additional images, calculate misclassification statistics",
+  "technique_changes": "Initial submission",
+  "commit_id": "",
+  "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
+  "required": [ "num_examples", "epsilon", "max_iter", "add_delta", "trigger_size", "find_label_dist", "misclassification_dist",  "feature_dist"],
+  "additionalProperties": false,
+  "type": "object",
+  "properties": {
+    "num_examples": {
+      "description": "Number of example images to use during feature generation",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 14,
+      "suggested_minimum": 3,
+      "suggested_maximum": 14
+    },
+    "epsilon": {
+      "description": "Gradient descent step size",
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "suggested_minimum": 0.01,
+      "suggested_maximum": 0.1
+    },
+    "max_iter": {
+      "description": "Maximum number of steps of gradient descent",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100,
+      "suggested_minimum": 1,
+      "suggested_maximum": 20
+    },
+    "add_delta": {
+      "description": "If 1, trigger is made by adding a delta instead of replacing pixels",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1,
+      "suggested_minimum": 0,
+      "suggested_maximum": 1
+    },
+    "trigger_size": {
+      "description": "Size of pixel patch / trigger (l x l)",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500,
+      "suggested_minimum": 10,
+      "suggested_maximum": 250
+    },
+    "find_label_dist": {
+      "description": "Number of training examples",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "suggested_minimum": 1,
+      "suggested_maximum": 5
+    },
+    "misclassification_dist": {
+      "description": "Number of validation examples",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4,
+      "suggested_minimum": 1,
+      "suggested_maximum": 4
+    },
+    "feature_dist": {
+      "description": "Number of test examples",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "suggested_minimum": 1,
+      "suggested_maximum": 5
+    }
+  }
+}
