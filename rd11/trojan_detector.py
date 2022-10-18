@@ -79,7 +79,7 @@ def trojan_detector(model_filepath,
             
     clf = load(os.path.join(parameters_dirpath, "clf.joblib"))
     scaler = load(os.path.join(parameters_dirpath, "scaler.joblib"))
-    trojan_probability = clf.predict_proba(np.array(features).reshape(1,-1))[0][1]
+    trojan_probability = clf.predict_proba(scaler.transform(np.array(features).reshape(1,-1)))[0][1]
 
     logging.info('Trojan Probability: {}'.format(trojan_probability))
 
