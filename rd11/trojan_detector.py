@@ -71,14 +71,15 @@ def trojan_detector(model_filepath,
 
     #logging.info('Inferencing {} images'.format(len(fns)))
 
-    images, locs = generate_example_images(model, model_dir, num_examples, device)
+    #images, locs = generate_example_images(model, model_dir, num_examples, device)
 
-    features = list(gen_features(model, model_filepath, images, locs, device, num_runs, num_examples, epsilon, max_iter, add_delta, trigger_size, train_len, val_len, test_len))
+    #features = list(gen_features(model, model_filepath, images, locs, device, num_runs, num_examples, epsilon, max_iter, add_delta, trigger_size, train_len, val_len, test_len))
+    features = weight_analysis(model)
     #print(features)
             
     clf = load(os.path.join(parameters_dirpath, "clf.joblib"))
     scaler = load(os.path.join(parameters_dirpath, "scaler.joblib"))
-    trojan_probability = clf.predict_proba(scaler.transform(np.array(features).reshape(1,-1)))[0][1]
+    trojan_probability = clf.predict_proba(np.array(features).reshape(1,-1))[0][1]
 
     logging.info('Trojan Probability: {}'.format(trojan_probability))
 
@@ -123,9 +124,11 @@ def configure(output_parameters_dirpath,
         model.to(device)
         model.eval()
 
-        images, locs = generate_example_images(model, os.path.join(configure_models_dirpath, model_dirpath), num_examples, device)
+        feature_vector = list(weight_analysis(model))
+
+        #images, locs = generate_example_images(model, os.path.join(configure_models_dirpath, model_dirpath), num_examples, device)
         
-        feature_vector = list(gen_features(model, model_filepath, images, locs, device, num_runs, num_examples, epsilon, max_iter, add_delta, trigger_size, train_len, val_len, test_len))
+        #feature_vector = list(gen_features(model, model_filepath, images, locs, device, num_runs, num_examples, epsilon, max_iter, add_delta, trigger_size, train_len, val_len, test_len))
         #print(feature_vector)
         features.append(feature_vector)
         
@@ -145,6 +148,46 @@ def configure(output_parameters_dirpath,
     dump(scaler, os.path.join(output_parameters_dirpath, "scaler.joblib"))
     dump(model, os.path.join(output_parameters_dirpath, "clf.joblib"))
     
+def weight_analysis(model):
+    #print(model)
+    try:
+        weights = model.fc._parameters['weight']
+        biases = model.fc._parameters['bias']
+    except:
+        try:
+            weights = model.head._parameters['weight']
+            biases = model.head._parameters['bias']
+        except:
+            weights = model.classifier[1]._parameters['weight']
+            biases = model.classifier[1]._parameters['bias']
+    weights = weights.detach().to('cpu')
+    sum_weights = torch.sum(weights, axis=1)
+    avg_weights = torch.mean(weights, axis=1)# + biases
+    std_weights = torch.std(weights, axis=1)
+    max_weights = torch.max(weights, dim=1)[0]
+    sorted_weights = sorted(avg_weights, reverse=True)
+    Q1 = (sorted_weights[0] - sorted_weights[1]) / (sorted_weights[0] - sorted_weights[-1])
+    Q2 = (sorted_weights[1] - sorted_weights[2]) / (sorted_weights[0] - sorted_weights[-1])
+    Q3 = (sorted_weights[2] - sorted_weights[3]) / (sorted_weights[0] - sorted_weights[-1])
+    Q4 = (sorted_weights[3] - sorted_weights[4]) / (sorted_weights[0] - sorted_weights[-1])
+    Q = max([Q1,Q2,Q3,Q4])
+    max_weight = max(avg_weights)
+    min_weight = min(avg_weights)
+    mean_weight = torch.mean(avg_weights)
+    std_weight = torch.std(avg_weights)
+    max_std_weight = max(std_weights)
+    min_std_weight = min(std_weights)
+    #print(std_weights.shape)
+    #return 1/0
+    max_max_weight = max(max_weights)
+    mean_max_weight = torch.mean(max_weights)
+    std_max_weight = torch.std(max_weights)
+    max_sum_weight = max(sum_weights)
+    mean_sum_weight = torch.mean(sum_weights)
+    std_sum_weight = torch.std(sum_weights)
+    n = avg_weights.shape[0]
+    return Q, max_weight, mean_weight, std_weight, max_std_weight, max_max_weight, mean_max_weight, std_max_weight, max_sum_weight, mean_sum_weight, std_sum_weight
+
 def gen_features(model, model_filepath, images, locs, device, num_runs, num_examples, epsilon, max_iter, add_delta, trigger_size, train_len, val_len, test_len):
 
     for m in range(num_runs):

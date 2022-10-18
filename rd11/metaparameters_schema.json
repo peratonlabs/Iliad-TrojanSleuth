@@ -1,12 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Algorithm Meta-Parameters",
-  "technique": "Trigger reconstruction",
-  "technique_description": "Reconstruct trigger via gradient descent, test on additional images, calculate misclassification statistics",
-  "technique_changes": "Initial submission",
+  "technique": "Weight analysis test",
+  "technique_description": "Train a classifier on statistics describing the final layer of weights in the network.",
+  "technique_changes": "Testing our weight analysis rather than trigger reconstruction",
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
-  "required": [ "num_examples", "epsilon", "max_iter", "add_delta", "trigger_size", "find_label_dist", "misclassification_dist",  "feature_dist"],
+  "required": [ ],
   "additionalProperties": false,
   "type": "object",
   "properties": {
