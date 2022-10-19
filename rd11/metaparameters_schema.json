@@ -3,7 +3,7 @@
   "title": "Algorithm Meta-Parameters",
   "technique": "Weight analysis test",
   "technique_description": "Train a classifier on statistics describing the final layer of weights in the network.",
-  "technique_changes": "Re-trained",
+  "technique_changes": "Pruned features",
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
   "required": [ ],

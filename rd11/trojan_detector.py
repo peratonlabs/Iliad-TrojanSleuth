@@ -1,10 +1,10 @@
 import os
 import copy
-import numpy as np
-import cv2
-import skimage
 import torch
 import torchvision
+import numpy as np
+import cv2
+import skimage.transform
 import json
 import jsonschema
 from joblib import load, dump
@@ -17,7 +17,7 @@ import logging
 import warnings
 warnings.filterwarnings("ignore")
 
-from PIL import Image
+#from PIL import Image
     
 
 def trojan_detector(model_filepath,
@@ -161,10 +161,10 @@ def weight_analysis(model):
             weights = model.classifier[1]._parameters['weight']
             biases = model.classifier[1]._parameters['bias']
     weights = weights.detach().to('cpu')
-    sum_weights = torch.sum(weights, axis=1)
-    avg_weights = torch.mean(weights, axis=1)# + biases
-    std_weights = torch.std(weights, axis=1)
-    max_weights = torch.max(weights, dim=1)[0]
+    sum_weights = torch.sum(weights, axis=1)# + biases.detach().to('cpu')
+    avg_weights = torch.mean(weights, axis=1)# + biases.detach().to('cpu')
+    std_weights = torch.std(weights, axis=1)# + biases.detach().to('cpu')
+    max_weights = torch.max(weights, dim=1)[0]# + biases.detach().to('cpu')
     sorted_weights = sorted(avg_weights, reverse=True)
     Q1 = (sorted_weights[0] - sorted_weights[1]) / (sorted_weights[0] - sorted_weights[-1])
     Q2 = (sorted_weights[1] - sorted_weights[2]) / (sorted_weights[0] - sorted_weights[-1])
@@ -186,7 +186,7 @@ def weight_analysis(model):
     mean_sum_weight = torch.mean(sum_weights)
     std_sum_weight = torch.std(sum_weights)
     n = avg_weights.shape[0]
-    return Q, max_weight, mean_weight, std_weight, max_std_weight, max_max_weight, mean_max_weight, std_max_weight, max_sum_weight, mean_sum_weight, std_sum_weight
+    return Q, max_weight, std_weight, max_std_weight, std_max_weight
 
 def gen_features(model, model_filepath, images, locs, device, num_runs, num_examples, epsilon, max_iter, add_delta, trigger_size, train_len, val_len, test_len):
 
