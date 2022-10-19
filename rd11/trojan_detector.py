@@ -1,6 +1,7 @@
 import os
 import copy
 import torch
+from torch.nn.functional import normalize as normalize
 import torchvision
 import numpy as np
 import cv2
@@ -186,7 +187,31 @@ def weight_analysis(model):
     mean_sum_weight = torch.mean(sum_weights)
     std_sum_weight = torch.std(sum_weights)
     n = avg_weights.shape[0]
-    return Q, max_weight, std_weight, max_std_weight, std_max_weight
+
+    sorted_weights = sorted(normalize(avg_weights.reshape(1, -1),p=1))[0]
+    Q1 = (sorted_weights[0] - sorted_weights[1]) / (sorted_weights[0] - sorted_weights[-1])
+    Q2 = (sorted_weights[1] - sorted_weights[2]) / (sorted_weights[0] - sorted_weights[-1])
+    Q3 = (sorted_weights[2] - sorted_weights[3]) / (sorted_weights[0] - sorted_weights[-1])
+    Q4 = (sorted_weights[3] - sorted_weights[4]) / (sorted_weights[0] - sorted_weights[-1])
+    Q_norm = max([Q1,Q2,Q3,Q4])
+    #sum_weights = normalize(sum_weights.reshape(1, -1))[0]
+    avg_weights = normalize(avg_weights.reshape(1, -1))[0]
+    std_weights = normalize(std_weights.reshape(1, -1))[0]
+    max_weights = normalize(max_weights.reshape(1, -1))[0]
+    max_weight_norm = max(avg_weights)
+    min_weight_norm = min(avg_weights)
+    mean_weight_norm = torch.mean(avg_weights)
+    std_weight_norm = torch.std(avg_weights)
+    max_std_weight_norm = max(std_weights)
+    mean_std_weight_norm = torch.mean(std_weights)
+    std_std_weight_norm = torch.std(std_weights)
+    #print(std_weights.shape)
+    #return 1/0
+    max_max_weight_norm = max(max_weights)
+    mean_max_weight_norm = torch.mean(max_weights)
+    std_max_weight_norm = torch.std(max_weights)
+
+    return Q, max_weight, std_weight, max_std_weight, std_max_weight, max_weight_norm, std_weight_norm, std_max_weight_norm
 
 def gen_features(model, model_filepath, images, locs, device, num_runs, num_examples, epsilon, max_iter, add_delta, trigger_size, train_len, val_len, test_len):
 
