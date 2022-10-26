@@ -2,77 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Algorithm Meta-Parameters",
   "technique": "Weight analysis test",
-  "technique_description": "Train a classifier on statistics describing the final layer of weights in the network.",
-  "technique_changes": "Added normalized features",
-  "commit_id": "",
+  "technique_description": "Train a classifier on the 90 most important parameters according to a random forest, as well as 8 statistics describing the final layer of weights in the network.",
+  "technique_changes": "Train on the most important parameters",
+  "commit_id": "11d45977875b4da1e0609a418282e722bbde57f1",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth",
   "required": [ ],
   "additionalProperties": false,
   "type": "object",
   "properties": {
-    "num_examples": {
-      "description": "Number of example images to use during feature generation",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 14,
-      "suggested_minimum": 3,
-      "suggested_maximum": 14
-    },
-    "epsilon": {
-      "description": "Gradient descent step size",
-      "type": "number",
-      "minimum": 0.0,
-      "maximum": 1.0,
-      "suggested_minimum": 0.01,
-      "suggested_maximum": 0.1
-    },
-    "max_iter": {
-      "description": "Maximum number of steps of gradient descent",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 100,
-      "suggested_minimum": 1,
-      "suggested_maximum": 20
-    },
-    "add_delta": {
-      "description": "If 1, trigger is made by adding a delta instead of replacing pixels",
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 1,
-      "suggested_minimum": 0,
-      "suggested_maximum": 1
-    },
-    "trigger_size": {
-      "description": "Size of pixel patch / trigger (l x l)",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 500,
-      "suggested_minimum": 10,
-      "suggested_maximum": 250
-    },
-    "find_label_dist": {
-      "description": "Number of training examples",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 5,
-      "suggested_minimum": 1,
-      "suggested_maximum": 5
-    },
-    "misclassification_dist": {
-      "description": "Number of validation examples",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 4,
-      "suggested_minimum": 1,
-      "suggested_maximum": 4
-    },
-    "feature_dist": {
-      "description": "Number of test examples",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 5,
-      "suggested_minimum": 1,
-      "suggested_maximum": 5
-    }
   }
 }
