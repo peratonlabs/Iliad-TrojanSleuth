@@ -44,7 +44,7 @@ def trojan_detector(model_filepath,
     model.to(device)
     model.eval()
 
-    sizes = [2223872, 23508032, 87466752]
+    sizes = [2223872, 23508032, 50000000]
     archs = ["mobile", "resnet", "vt"]
 
     for arch_i in range(len(archs)):
@@ -80,7 +80,7 @@ def configure(output_parameters_dirpath,
 
     logging.info('Writing configured parameter data to ' + output_parameters_dirpath)
 
-    sizes = [2223872, 23508032, 87466752]
+    sizes = [2223872, 23508032, 50000000]
     archs = ["mobile", "resnet", "vt"]
 
     for arch_i in range(len(archs)):
@@ -129,7 +129,7 @@ def weight_analysis(model, size, device):
     for param in model.parameters():
         params.append(torch.flatten(param))
     #print(len(params))
-    params = torch.cat((params[:-2]), dim=0)
+    params = torch.cat((params[:-2]), dim=0)[:50000000]
     #print(params.shape)
     if len(params) != size:
         return None, 0
@@ -206,12 +206,12 @@ def train_model(data, summary_size):
     #clf_svm = SVC(probability=True, kernel='rbf')
     clf_lr = LogisticRegression()
     importance = clf.feature_importances_
-    num_feats = -125
+    num_feats = -50
     importance = np.argsort(importance)[num_feats:]
     X = np.concatenate((X[:,importance], X[:,-1*summary_size:]), axis=1)
     X = sc.fit_transform(X)
-    scores = cross_val_score(clf_lr, X, y, cv=5, scoring=custom_scoring_function, n_jobs=5)
-    scores = cross_val_score(clf_lr, X, y, cv=5, scoring=custom_loss_function, n_jobs=5)
+    scores = cross_val_score(clf_lr, X, y, cv=3, scoring=custom_scoring_function, n_jobs=3)
+    scores = cross_val_score(clf_lr, X, y, cv=3, scoring=custom_loss_function, n_jobs=3)
     clf_lr.fit(X,y)
 
     return clf_lr, sc, importance
