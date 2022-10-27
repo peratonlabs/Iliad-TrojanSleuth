@@ -206,7 +206,7 @@ def train_model(data, summary_size):
     #clf_svm = SVC(probability=True, kernel='rbf')
     clf_lr = LogisticRegression()
     importance = clf.feature_importances_
-    num_feats = -50
+    num_feats = -30
     importance = np.argsort(importance)[num_feats:]
     X = np.concatenate((X[:,importance], X[:,-1*summary_size:]), axis=1)
     X = sc.fit_transform(X)
