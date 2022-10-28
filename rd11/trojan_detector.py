@@ -44,7 +44,7 @@ def trojan_detector(model_filepath,
     model.to(device)
     model.eval()
 
-    sizes = [2223872, 23508032, 50000000]
+    sizes = [2223872, 23508032, 40000000]
     archs = ["mobile", "resnet", "vt"]
 
     for arch_i in range(len(archs)):
@@ -80,7 +80,7 @@ def configure(output_parameters_dirpath,
 
     logging.info('Writing configured parameter data to ' + output_parameters_dirpath)
 
-    sizes = [2223872, 23508032, 50000000]
+    sizes = [2223872, 23508032, 40000000]
     archs = ["mobile", "resnet", "vt"]
 
     for arch_i in range(len(archs)):
@@ -94,7 +94,7 @@ def configure(output_parameters_dirpath,
         for i, model_dirpath in enumerate(sorted(os.listdir(configure_models_dirpath))):
 
             #print(model_dirpath)
-            if i > 150 and arch=="vt": continue
+            #if i > 150 and arch=="vt": continue
             model_filepath = os.path.join(configure_models_dirpath, model_dirpath, "model.pt")
             examples_dirpath = os.path.join(configure_models_dirpath, model_dirpath, "clean-example-data/")
             # load the model
@@ -129,7 +129,7 @@ def weight_analysis(model, size, device):
     for param in model.parameters():
         params.append(torch.flatten(param))
     #print(len(params))
-    params = torch.cat((params[:-2]), dim=0)[:50000000]
+    params = torch.cat((params[:-2]), dim=0)[-40000000:]
     #print(params.shape)
     if len(params) != size:
         return None, 0
@@ -198,15 +198,20 @@ def weight_analysis(model, size, device):
 
 def train_model(data, summary_size):
 
-    X = data[:,:-1].astype(np.float16)
+    X = data[:,:-1].astype(np.float32)
     y = data[:,-1]
     sc = StandardScaler()
-    clf_rf = RandomForestClassifier(n_estimators=10)
+    clf_rf = RandomForestClassifier(n_estimators=100)
     clf_svm = SVC(probability=True, kernel='rbf')
-    clf = clf_rf.fit(X[:,:-1*summary_size], y)
-    importance_full = np.argsort(clf.feature_importances_)
-    num_feats = -30
-    importance = importance_full[num_feats:]
+    num_splits = 10
+    total_num_feats = -100
+    importance = []
+    for i in range(num_splits):
+        clf = clf_rf.fit(X_train[:,X.shape[1]*i//num_splits:X.shape[1]*(i+1)//num_splits], y)
+        importance_full = np.argsort(clf.feature_importances_)+int(X.shape[1]*i//num_splits)#[-50:]
+        num_feats = int(total_num_feats / num_splits)
+        importance.append(importance_full[num_feats:])
+    importance = np.array(importance).flatten()
     X_full = np.concatenate((X[:,importance], X[:,-1*summary_size:]), axis=1)
     X_full = sc.fit_transform(X_full)
     clf_svm.fit(X_full,y)
