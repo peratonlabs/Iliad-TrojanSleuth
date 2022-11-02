@@ -44,25 +44,23 @@ def trojan_detector(model_filepath,
     model.to(device)
     model.eval()
 
-    sizes = [2223872, 23508032, 40000000]
+    sizes = [105, 107, 75]
     archs = ["mobile", "resnet", "vt"]
 
     for arch_i in range(len(archs)):
 
         arch = archs[arch_i]
         size = sizes[arch_i]
-        
-        features, summary_size = weight_analysis(model, size, device)
+
+        clf = load(os.path.join(parameters_dirpath, "clf_"+arch+".joblib"))
+        scaler = load(os.path.join(parameters_dirpath, "scaler_"+arch+".joblib"))
+        importances = load(os.path.join(parameters_dirpath, "imp_"+arch+".joblib")).tolist()
+        features, summary_size = weight_analysis_configure(model, arch, importances, device)
 
         if features != None:
-            
-            clf = load(os.path.join(parameters_dirpath, "clf_"+arch+".joblib"))
-            scaler = load(os.path.join(parameters_dirpath, "scaler_"+arch+".joblib"))
-            importance = load(os.path.join(parameters_dirpath, "imp_"+arch+".joblib"))
 
             features = np.array(features.detach().cpu()).reshape(1,-1)
-            reduced_features = np.concatenate((features[:,importance], features[:,-1*summary_size:]), axis=1)
-            trojan_probability = clf.predict_proba(scaler.transform(reduced_features))[0][1]
+            trojan_probability = clf.predict_proba(scaler.transform(features))[0][1]
 
             logging.info('Trojan Probability: {}'.format(trojan_probability))
 
@@ -80,48 +78,179 @@ def configure(output_parameters_dirpath,
 
     logging.info('Writing configured parameter data to ' + output_parameters_dirpath)
 
-    sizes = [2223872, 23508032, 40000000]
+    sizes = [105, 107, 75]
     archs = ["mobile", "resnet", "vt"]
 
     for arch_i in range(len(archs)):
 
         arch = archs[arch_i]
         size = sizes[arch_i]
+        #print(arch)
     
+        importances = []
         features = []
-        labels = []
+        idx = np.random.choice(96, size=96, replace=False)
+
+        for parameter_index in range(sizes[arch_i]-1):
+            params = []
+            labels = []
+
+            for i, model_dirpath in enumerate(sorted(os.listdir(configure_models_dirpath))):
+
+                model_filepath = os.path.join(configure_models_dirpath, model_dirpath, "model.pt")
+                model = torch.load(model_filepath)
+                model.to(device)
+                model.eval()
+
+                param = get_param(model, arch, parameter_index, device)
+                if param == None:
+                    continue
+                params.append(param.detach().cpu().numpy())
+
+                label = np.loadtxt(os.path.join(configure_models_dirpath, model_dirpath, 'ground_truth.csv'), dtype=bool)
+                labels.append(label)
+
+            params = np.array(params).astype(np.float32)
+            labels = np.expand_dims(np.array(labels),-1)
+
+            params = params[idx, :]
+            labels = labels[idx]
+            cutoff = int(params.shape[0]*0.75)
+            X_train = params[:cutoff,:]
+            X_test = params[cutoff:,:]
+            y_train = labels[:cutoff]
+            y_test = labels[cutoff:]
+            clf = clf_rf.fit(X_train, y_train)
+            importance = np.argsort(clf.feature_importances_)[-10:]
+            importances.append(importance)
 
         for i, model_dirpath in enumerate(sorted(os.listdir(configure_models_dirpath))):
 
-            #print(model_dirpath)
-            #if i > 150 and arch=="vt": continue
             model_filepath = os.path.join(configure_models_dirpath, model_dirpath, "model.pt")
-            examples_dirpath = os.path.join(configure_models_dirpath, model_dirpath, "clean-example-data/")
-            # load the model
             model = torch.load(model_filepath)
-            # move the model to the device
             model.to(device)
             model.eval()
 
-            feature_vector, summary_size = weight_analysis(model, size, device)
+            feature_vector, summary_size = weight_analysis_configure(model, arch, importances, device)
             if feature_vector == None:
                 continue
             real_summary_size = summary_size
             feature_vector = feature_vector.detach().cpu().numpy()
-
             features.append(feature_vector)
             
-            label = "poisoned-example-data" in os.listdir(os.path.join(configure_models_dirpath, model_dirpath))
-            labels.append(label)
-            
         features = np.array(features)
-        labels = np.expand_dims(np.array(labels),-1)
         data = np.concatenate((features, labels), axis=1)
 
-        model, scaler, importance = train_model(data, real_summary_size)
+        model, scaler = train_model(data, real_summary_size, idx)
         dump(scaler, os.path.join(output_parameters_dirpath, "scaler_"+arch+".joblib"))
         dump(model, os.path.join(output_parameters_dirpath, "clf_"+arch+".joblib"))
-        dump(importance, os.path.join(output_parameters_dirpath, "imp_"+arch+".joblib"))
+        dump(np.array(importances), os.path.join(output_parameters_dirpath, "imp_"+arch+".joblib"))
+
+def get_param(model, arch, parameter_index, device):
+    #print(model)
+    params = []
+    for param in model.named_parameters():
+        if 'weight' in param[0]:
+            #print(param[0])
+            params.append(torch.flatten(param[1]))
+    if arch == "mobile" and len(params) !=105:
+        return None
+    if arch == "resnet" and len(params) !=107:
+        return None
+    if arch == "vt" and len(params) !=75:
+        return None
+    #print(len(params))
+    param = params[parameter_index]
+    return param
+
+def weight_analysis_configure(model, arch, importances, device):
+    #print(model)
+    layers = []
+    for param in model.named_parameters():
+        if 'weight' in param[0]:
+            layers.append(torch.flatten(param[1]))
+    if arch == "mobile" and len(layers) !=105:
+        return None, 0
+    if arch == "resnet" and len(layers) !=107:
+        return None, 0
+    if arch == "vt" and len(layers) !=75:
+        return None, 0
+    params = []
+    counter = 0
+    for param in model.named_parameters():
+        if counter == len(importances):
+            break
+        if 'weight' in param[0]:
+            layer = torch.flatten(param[1])
+            importance_indices = importances[counter]
+            counter +=1
+            
+            #print(1/0)
+            try:
+                weights = layer[importance_indices]
+                params.append(weights)
+            except:
+                print(param[0])
+                print(layer.shape, importance_indices)
+    #print(len(params))
+    params = torch.cat((params), dim=0)
+
+    try:
+        weights = model.fc._parameters['weight']
+        biases = model.fc._parameters['bias']
+    except:
+        try:
+            weights = model.head._parameters['weight']
+            biases = model.head._parameters['bias']
+        except:
+            weights = model.classifier[1]._parameters['weight']
+            biases = model.classifier[1]._parameters['bias']
+    weights = weights.detach()#.to('cpu')
+    sum_weights = torch.sum(weights, axis=1)# + biases.detach().to('cpu')
+    avg_weights = torch.mean(weights, axis=1)# + biases.detach().to('cpu')
+    std_weights = torch.std(weights, axis=1)# + biases.detach().to('cpu')
+    max_weights = torch.max(weights, dim=1)[0]# + biases.detach().to('cpu')
+    sorted_weights = sorted(avg_weights, reverse=True)
+    Q1 = (sorted_weights[0] - sorted_weights[1]) / (sorted_weights[0] - sorted_weights[-1])
+    Q2 = (sorted_weights[1] - sorted_weights[2]) / (sorted_weights[0] - sorted_weights[-1])
+    Q3 = (sorted_weights[2] - sorted_weights[3]) / (sorted_weights[0] - sorted_weights[-1])
+    Q4 = (sorted_weights[3] - sorted_weights[4]) / (sorted_weights[0] - sorted_weights[-1])
+    Q = max([Q1,Q2,Q3,Q4])
+    max_weight = max(avg_weights)
+    min_weight = min(avg_weights)
+    mean_weight = torch.mean(avg_weights)
+    std_weight = torch.std(avg_weights)
+    max_std_weight = max(std_weights)
+    min_std_weight = min(std_weights)
+    max_max_weight = max(max_weights)
+    mean_max_weight = torch.mean(max_weights)
+    std_max_weight = torch.std(max_weights)
+    max_sum_weight = max(sum_weights)
+    mean_sum_weight = torch.mean(sum_weights)
+    std_sum_weight = torch.std(sum_weights)
+    n = avg_weights.shape[0]
+
+    sorted_weights = sorted(normalize(avg_weights.reshape(1, -1),p=1), reverse=True)[0]
+    Q1 = (sorted_weights[0] - sorted_weights[1]) / (sorted_weights[0] - sorted_weights[-1])
+    Q2 = (sorted_weights[1] - sorted_weights[2]) / (sorted_weights[0] - sorted_weights[-1])
+    Q3 = (sorted_weights[2] - sorted_weights[3]) / (sorted_weights[0] - sorted_weights[-1])
+    Q4 = (sorted_weights[3] - sorted_weights[4]) / (sorted_weights[0] - sorted_weights[-1])
+    Q_norm = max([Q1,Q2,Q3,Q4])
+    avg_weights = normalize(avg_weights.reshape(1, -1))[0]
+    std_weights = normalize(std_weights.reshape(1, -1))[0]
+    max_weights = normalize(max_weights.reshape(1, -1))[0]
+    max_weight_norm = max(avg_weights)
+    min_weight_norm = min(avg_weights)
+    mean_weight_norm = torch.mean(avg_weights)
+    std_weight_norm = torch.std(avg_weights)
+    max_std_weight_norm = max(std_weights)
+    mean_std_weight_norm = torch.mean(std_weights)
+    std_std_weight_norm = torch.std(std_weights)
+    max_max_weight_norm = max(max_weights)
+    mean_max_weight_norm = torch.mean(max_weights)
+    std_max_weight_norm = torch.std(max_weights)
+    summary_params = torch.tensor([Q, max_weight, std_weight, max_std_weight, std_max_weight, max_weight_norm, std_weight_norm, std_max_weight_norm]).to(device)
+    return torch.cat((params, summary_params)), summary_params.shape[0]
 
 def weight_analysis(model, size, device):
     #print(model)
@@ -203,20 +332,10 @@ def train_model(data, summary_size):
     sc = StandardScaler()
     clf_rf = RandomForestClassifier(n_estimators=100)
     clf_svm = SVC(probability=True, kernel='rbf')
-    num_splits = 10
-    total_num_feats = -100
-    importance = []
-    for i in range(num_splits):
-        clf = clf_rf.fit(X_train[:,X.shape[1]*i//num_splits:X.shape[1]*(i+1)//num_splits], y)
-        importance_full = np.argsort(clf.feature_importances_)+int(X.shape[1]*i//num_splits)#[-50:]
-        num_feats = int(total_num_feats / num_splits)
-        importance.append(importance_full[num_feats:])
-    importance = np.array(importance).flatten()
-    X_full = np.concatenate((X[:,importance], X[:,-1*summary_size:]), axis=1)
-    X_full = sc.fit_transform(X_full)
-    clf_svm.fit(X_full,y)
+    X = sc.fit_transform(X)
+    clf_svm.fit(X,y)
 
-    return clf_svm, sc, importance
+    return clf_svm, sc
 
 def custom_scoring_function(estimator, X, y):
     return roc_auc_score(y, estimator.predict_proba(X)[:,1])
