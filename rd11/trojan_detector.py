@@ -44,8 +44,8 @@ def trojan_detector(model_filepath,
     model.to(device)
     model.eval()
 
-    sizes = [105, 107, 75]
-    archs = ["mobile", "resnet", "vt"]
+    sizes = [158, 161, 152]
+    archs = ["mobile", "resnet", "vit"]
 
     for arch_i in range(len(archs)):
 
@@ -55,12 +55,15 @@ def trojan_detector(model_filepath,
         clf = load(os.path.join(parameters_dirpath, "clf_"+arch+".joblib"))
         scaler = load(os.path.join(parameters_dirpath, "scaler_"+arch+".joblib"))
         importances = load(os.path.join(parameters_dirpath, "imp_"+arch+".joblib")).tolist()
-        features, summary_size = weight_analysis_configure(model, arch, importances, device)
+        overall_importances = load(os.path.join(parameters_dirpath, "overallImp_"+arch+".joblib"))
+
+        features, summary_size = weight_analysis_configure(model, arch, size, importances, device)
 
         if features != None:
 
             features = np.array(features.detach().cpu()).reshape(1,-1)
-            trojan_probability = clf.predict_proba(scaler.transform(features))[0][1]
+            features_full = np.concatenate((features[:,overall_importances], features[:,-1*summary_size:]), axis=1)
+            trojan_probability = clf.predict_proba(scaler.transform(features_full))[0][1]
 
             logging.info('Trojan Probability: {}'.format(trojan_probability))
 
@@ -78,8 +81,8 @@ def configure(output_parameters_dirpath,
 
     logging.info('Writing configured parameter data to ' + output_parameters_dirpath)
 
-    sizes = [105, 107, 75]
-    archs = ["mobile", "resnet", "vt"]
+    sizes = [158, 161, 152]
+    archs = ["mobile", "resnet", "vit"]
 
     for arch_i in range(len(archs)):
 
@@ -89,9 +92,9 @@ def configure(output_parameters_dirpath,
     
         importances = []
         features = []
-        idx = np.random.choice(96, size=96, replace=False)
+        labels = []
 
-        for parameter_index in range(sizes[arch_i]-1):
+        for parameter_index in range(size-2):
             params = []
             labels = []
 
@@ -102,26 +105,19 @@ def configure(output_parameters_dirpath,
                 model.to(device)
                 model.eval()
 
-                param = get_param(model, arch, parameter_index, device)
+                param = get_param(model, arch, size, parameter_index, device)
                 if param == None:
                     continue
                 params.append(param.detach().cpu().numpy())
 
                 label = np.loadtxt(os.path.join(configure_models_dirpath, model_dirpath, 'ground_truth.csv'), dtype=bool)
-                labels.append(label)
+                labels.append(int(label))
 
             params = np.array(params).astype(np.float32)
             labels = np.expand_dims(np.array(labels),-1)
 
-            params = params[idx, :]
-            labels = labels[idx]
-            cutoff = int(params.shape[0]*0.75)
-            X_train = params[:cutoff,:]
-            X_test = params[cutoff:,:]
-            y_train = labels[:cutoff]
-            y_test = labels[cutoff:]
-            clf = clf_rf.fit(X_train, y_train)
-            importance = np.argsort(clf.feature_importances_)[-10:]
+            clf = clf_rf.fit(params, labels)
+            importance = np.argsort(clf.feature_importances_)[-100:]
             importances.append(importance)
 
         for i, model_dirpath in enumerate(sorted(os.listdir(configure_models_dirpath))):
@@ -131,7 +127,7 @@ def configure(output_parameters_dirpath,
             model.to(device)
             model.eval()
 
-            feature_vector, summary_size = weight_analysis_configure(model, arch, importances, device)
+            feature_vector, summary_size = weight_analysis_configure(model, arch, size, importances, device)
             if feature_vector == None:
                 continue
             real_summary_size = summary_size
@@ -141,57 +137,48 @@ def configure(output_parameters_dirpath,
         features = np.array(features)
         data = np.concatenate((features, labels), axis=1)
 
-        model, scaler = train_model(data, real_summary_size, idx)
+        model, scaler, overall_importance = train_model(data, real_summary_size, arch)
         dump(scaler, os.path.join(output_parameters_dirpath, "scaler_"+arch+".joblib"))
         dump(model, os.path.join(output_parameters_dirpath, "clf_"+arch+".joblib"))
         dump(np.array(importances), os.path.join(output_parameters_dirpath, "imp_"+arch+".joblib"))
+        dump(overall_importance, os.path.join(output_parameters_dirpath, "overallImp_"+arch+".joblib"))
 
-def get_param(model, arch, parameter_index, device):
+def get_param(model, arch, size, parameter_index, device):
     #print(model)
     params = []
     for param in model.named_parameters():
-        if 'weight' in param[0]:
-            #print(param[0])
-            params.append(torch.flatten(param[1]))
-    if arch == "mobile" and len(params) !=105:
-        return None
-    if arch == "resnet" and len(params) !=107:
-        return None
-    if arch == "vt" and len(params) !=75:
+        #if 'weight' in param[0]:
+        #print(param[0])
+        params.append(torch.flatten(param[1]))
+    model_size = len(params)
+    if model_size != size:
         return None
     #print(len(params))
     param = params[parameter_index]
     return param
 
-def weight_analysis_configure(model, arch, importances, device):
+def weight_analysis_configure(model, arch, size, importances, device):
     #print(model)
     layers = []
     for param in model.named_parameters():
-        if 'weight' in param[0]:
-            layers.append(torch.flatten(param[1]))
-    if arch == "mobile" and len(layers) !=105:
-        return None, 0
-    if arch == "resnet" and len(layers) !=107:
-        return None, 0
-    if arch == "vt" and len(layers) !=75:
+        #if 'weight' in param[0]:
+        #print(param[0])
+        layers.append(torch.flatten(param[1]))
+    model_size = len(layers)
+    if model_size != size:
         return None, 0
     params = []
     counter = 0
     for param in model.named_parameters():
         if counter == len(importances):
             break
-        if 'weight' in param[0]:
-            layer = torch.flatten(param[1])
-            importance_indices = importances[counter]
-            counter +=1
-            
-            #print(1/0)
-            try:
-                weights = layer[importance_indices]
-                params.append(weights)
-            except:
-                print(param[0])
-                print(layer.shape, importance_indices)
+        #if 'weight' in param[0]:
+        layer = torch.flatten(param[1])
+        importance_indices = importances[counter]
+        counter +=1
+        weights = layer[importance_indices]
+        params.append(weights)
+
     #print(len(params))
     params = torch.cat((params), dim=0)
 
@@ -328,14 +315,18 @@ def weight_analysis(model, size, device):
 def train_model(data, summary_size):
 
     X = data[:,:-1].astype(np.float32)
+    X_train = X[:,:-1*summary_size]
     y = data[:,-1]
     sc = StandardScaler()
     clf_rf = RandomForestClassifier(n_estimators=100)
+    clf = clf_rf.fit(X_train, y)
+    importance = np.argsort(clf.feature_importances_)[-50:]
+    X = np.concatenate((X_train[:,importance], X[:,-1*summary_size:]), axis=1)
     clf_svm = SVC(probability=True, kernel='rbf')
     X = sc.fit_transform(X)
     clf_svm.fit(X,y)
 
-    return clf_svm, sc
+    return clf_svm, sc, importance
 
 def custom_scoring_function(estimator, X, y):
     return roc_auc_score(y, estimator.predict_proba(X)[:,1])
