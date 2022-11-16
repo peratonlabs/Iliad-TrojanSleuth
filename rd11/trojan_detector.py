@@ -325,9 +325,9 @@ def train_model(data, summary_size):
     X = np.concatenate((X_train[:,importance], X[:,-1*summary_size:]), axis=1)
     clf_svm = SVC(probability=True, kernel='rbf')
     X = sc.fit_transform(X)
-    clf_lr.fit(X,y)
+    clf_svm.fit(X,y)
 
-    return clf_lr, sc, importance
+    return clf_svm, sc, importance
 
 def custom_scoring_function(estimator, X, y):
     return roc_auc_score(y, estimator.predict_proba(X)[:,1])
