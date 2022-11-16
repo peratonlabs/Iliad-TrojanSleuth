@@ -319,14 +319,15 @@ def train_model(data, summary_size):
     y = data[:,-1]
     sc = StandardScaler()
     clf_rf = RandomForestClassifier(n_estimators=100)
+    clf_lr = LogisticRegression()
     clf = clf_rf.fit(X_train, y)
-    importance = np.argsort(clf.feature_importances_)[-500:]
+    importance = np.argsort(clf.feature_importances_)[-60:]
     X = np.concatenate((X_train[:,importance], X[:,-1*summary_size:]), axis=1)
     clf_svm = SVC(probability=True, kernel='rbf')
     X = sc.fit_transform(X)
-    clf_svm.fit(X,y)
+    clf_lr.fit(X,y)
 
-    return clf_svm, sc, importance
+    return clf_lr, sc, importance
 
 def custom_scoring_function(estimator, X, y):
     return roc_auc_score(y, estimator.predict_proba(X)[:,1])
