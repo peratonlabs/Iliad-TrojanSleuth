@@ -319,9 +319,8 @@ def train_model(data, summary_size):
     y = data[:,-1]
     sc = StandardScaler()
     clf_rf = RandomForestClassifier(n_estimators=100)
-    clf_lr = LogisticRegression()
     clf = clf_rf.fit(X_train, y)
-    importance = np.argsort(clf.feature_importances_)[-60:]
+    importance = np.argsort(clf.feature_importances_)[-50:]
     X = np.concatenate((X_train[:,importance], X[:,-1*summary_size:]), axis=1)
     clf_svm = SVC(probability=True, kernel='rbf')
     X = sc.fit_transform(X)
