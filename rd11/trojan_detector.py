@@ -324,9 +324,9 @@ def train_model(data, summary_size):
     importance = np.argsort(clf.feature_importances_)[-60:]
     X = np.concatenate((X_train[:,importance], X[:,-1*summary_size:]), axis=1)
     clf_svm = SVC(probability=True, kernel='rbf')
-    parameters = {'gamma':[0.01,0.1], 'C':[0.1,1,10,100]}
-    #clf_svm = GridSearchCV(clf_svm, parameters)
-    clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
+    parameters = {'gamma':[0.001,0.005,0.01,0.02], 'C':[0.1,1,10,100]}
+    clf_svm = GridSearchCV(clf_svm, parameters)
+    #clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
     X = sc.fit_transform(X)
     clf_svm.fit(X,y)
 
