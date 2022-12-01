@@ -331,7 +331,7 @@ def train_model(data, summary_size):
     X = sc.fit_transform(X)
     clf_rf.fit(X,y)
 
-    return clf_svm, sc, importance
+    return clf_rf, sc, importance
 
 def custom_scoring_function(estimator, X, y):
     return roc_auc_score(y, estimator.predict_proba(X)[:,1])
