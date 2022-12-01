@@ -9,6 +9,7 @@ import json
 import jsonschema
 from joblib import load, dump
 from sklearn.preprocessing import StandardScaler
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import roc_auc_score, log_loss
@@ -239,78 +240,6 @@ def weight_analysis_configure(model, arch, size, importances, device):
     summary_params = torch.tensor([Q, max_weight, std_weight, max_std_weight, std_max_weight, max_weight_norm, std_weight_norm, std_max_weight_norm]).to(device)
     return torch.cat((params, summary_params)), summary_params.shape[0]
 
-def weight_analysis(model, size, device):
-    #print(model)
-    params = []
-    for param in model.parameters():
-        params.append(torch.flatten(param))
-    #print(len(params))
-    params = torch.cat((params[:-2]), dim=0)[-40000000:]
-    #print(params.shape)
-    if len(params) != size:
-        return None, 0
-
-    try:
-        weights = model.fc._parameters['weight']
-        biases = model.fc._parameters['bias']
-    except:
-        try:
-            weights = model.head._parameters['weight']
-            biases = model.head._parameters['bias']
-        except:
-            weights = model.classifier[1]._parameters['weight']
-            biases = model.classifier[1]._parameters['bias']
-    weights = weights.detach()#.to('cpu')
-    sum_weights = torch.sum(weights, axis=1)# + biases.detach().to('cpu')
-    avg_weights = torch.mean(weights, axis=1)# + biases.detach().to('cpu')
-    std_weights = torch.std(weights, axis=1)# + biases.detach().to('cpu')
-    max_weights = torch.max(weights, dim=1)[0]# + biases.detach().to('cpu')
-    sorted_weights = sorted(avg_weights, reverse=True)
-    Q1 = (sorted_weights[0] - sorted_weights[1]) / (sorted_weights[0] - sorted_weights[-1])
-    Q2 = (sorted_weights[1] - sorted_weights[2]) / (sorted_weights[0] - sorted_weights[-1])
-    Q3 = (sorted_weights[2] - sorted_weights[3]) / (sorted_weights[0] - sorted_weights[-1])
-    Q4 = (sorted_weights[3] - sorted_weights[4]) / (sorted_weights[0] - sorted_weights[-1])
-    Q = max([Q1,Q2,Q3,Q4])
-    max_weight = max(avg_weights)
-    min_weight = min(avg_weights)
-    mean_weight = torch.mean(avg_weights)
-    std_weight = torch.std(avg_weights)
-    max_std_weight = max(std_weights)
-    min_std_weight = min(std_weights)
-
-    max_max_weight = max(max_weights)
-    mean_max_weight = torch.mean(max_weights)
-    std_max_weight = torch.std(max_weights)
-    max_sum_weight = max(sum_weights)
-    mean_sum_weight = torch.mean(sum_weights)
-    std_sum_weight = torch.std(sum_weights)
-    n = avg_weights.shape[0]
-
-    sorted_weights = sorted(normalize(avg_weights.reshape(1, -1),p=1), reverse=True)[0]
-    Q1 = (sorted_weights[0] - sorted_weights[1]) / (sorted_weights[0] - sorted_weights[-1])
-    Q2 = (sorted_weights[1] - sorted_weights[2]) / (sorted_weights[0] - sorted_weights[-1])
-    Q3 = (sorted_weights[2] - sorted_weights[3]) / (sorted_weights[0] - sorted_weights[-1])
-    Q4 = (sorted_weights[3] - sorted_weights[4]) / (sorted_weights[0] - sorted_weights[-1])
-    Q_norm = max([Q1,Q2,Q3,Q4])
-    #sum_weights = normalize(sum_weights.reshape(1, -1))[0]
-    avg_weights = normalize(avg_weights.reshape(1, -1))[0]
-    std_weights = normalize(std_weights.reshape(1, -1))[0]
-    max_weights = normalize(max_weights.reshape(1, -1))[0]
-    max_weight_norm = max(avg_weights)
-    min_weight_norm = min(avg_weights)
-    mean_weight_norm = torch.mean(avg_weights)
-    std_weight_norm = torch.std(avg_weights)
-    max_std_weight_norm = max(std_weights)
-    mean_std_weight_norm = torch.mean(std_weights)
-    std_std_weight_norm = torch.std(std_weights)
-
-    max_max_weight_norm = max(max_weights)
-    mean_max_weight_norm = torch.mean(max_weights)
-    std_max_weight_norm = torch.std(max_weights)
-
-    summary_params = torch.tensor([Q, max_weight, std_weight, max_std_weight, std_max_weight, max_weight_norm, std_weight_norm, std_max_weight_norm]).to(device)
-    return torch.cat((params, summary_params)), summary_params.shape[0]
-
 
 def train_model(data, summary_size):
 
@@ -325,8 +254,9 @@ def train_model(data, summary_size):
     X = np.concatenate((X_train[:,importance], X[:,-1*summary_size:]), axis=1)
     clf_svm = SVC(probability=True, kernel='rbf')
     parameters = {'gamma':[0.001,0.005,0.01,0.02], 'C':[0.1,1,10,100]}
-    clf_svm = GridSearchCV(clf_svm, parameters)
-    clf_rf = RandomForestClassifier(n_estimators=1000)
+    clf_rf = RandomForestClassifier(n_estimators=500)
+    clf_rf = CalibratedClassifierCV(base_estimator=clf_rf)
+    #clf_svm = GridSearchCV(clf_svm, parameters)
     #clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
     X = sc.fit_transform(X)
     clf_rf.fit(X,y)
