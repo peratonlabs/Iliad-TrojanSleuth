@@ -250,11 +250,11 @@ def train_model(data, summary_size):
     clf_rf = RandomForestClassifier(n_estimators=100)
     clf_lr = LogisticRegression()
     clf = clf_rf.fit(X_train, y)
-    importance = np.argsort(clf.feature_importances_)[-70:]
+    importance = np.argsort(clf.feature_importances_)[-250:]
     X = np.concatenate((X_train[:,importance], X[:,-1*summary_size:]), axis=1)
     clf_svm = SVC(probability=True, kernel='rbf')
     parameters = {'gamma':[0.001,0.005,0.01,0.02], 'C':[0.1,1,10,100]}
-    clf_rf = RandomForestClassifier(n_estimators=1000)
+    clf_rf = RandomForestClassifier(n_estimators=500)
     clf_rf = CalibratedClassifierCV(base_estimator=clf_rf)
     #clf_svm = GridSearchCV(clf_svm, parameters)
     #clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
