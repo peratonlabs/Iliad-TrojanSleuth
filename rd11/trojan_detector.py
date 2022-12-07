@@ -250,7 +250,7 @@ def train_model(data, summary_size):
     clf_rf = RandomForestClassifier(n_estimators=100)
     clf_lr = LogisticRegression()
     clf = clf_rf.fit(X_train, y)
-    importance = np.argsort(clf.feature_importances_)[-250:]
+    importance = np.argsort(clf.feature_importances_)[-1000:]
     X = np.concatenate((X_train[:,importance], X[:,-1*summary_size:]), axis=1)
     clf_svm = SVC(probability=True, kernel='rbf')
     parameters = {'gamma':[0.001,0.005,0.01,0.02], 'C':[0.1,1,10,100]}
