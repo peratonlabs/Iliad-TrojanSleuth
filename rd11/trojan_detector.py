@@ -14,7 +14,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import cross_val_score
 from sklearn.metrics import roc_auc_score, log_loss
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.svm import SVC
 
 import logging
@@ -256,12 +256,13 @@ def train_model(data, summary_size):
     parameters = {'gamma':[0.001,0.005,0.01,0.02], 'C':[0.1,1,10,100]}
     clf_rf = RandomForestClassifier(n_estimators=500)
     clf_rf = CalibratedClassifierCV(base_estimator=clf_rf)
-    #clf_svm = GridSearchCV(clf_svm, parameters)
+    clf_svm = GridSearchCV(clf_svm, parameters)
+    eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm)], voting='soft')
     #clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
     X = sc.fit_transform(X)
-    clf_rf.fit(X,y)
+    eclf.fit(X,y)
 
-    return clf_rf, sc, importance
+    return eclf, sc, importance
 
 def custom_scoring_function(estimator, X, y):
     return roc_auc_score(y, estimator.predict_proba(X)[:,1])
