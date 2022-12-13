@@ -82,7 +82,7 @@ def configure(output_parameters_dirpath,
 
     logging.info('Writing configured parameter data to ' + output_parameters_dirpath)
 
-    clf_rf = RandomForestClassifier(n_estimators=100)
+    clf_rf = RandomForestClassifier(n_estimators=500)
 
     sizes = [158, 161, 152]
     archs = ["mobile", "resnet", "vit"]
@@ -120,7 +120,7 @@ def configure(output_parameters_dirpath,
             labels = np.expand_dims(np.array(labels),-1)
 
             clf = clf_rf.fit(params, labels)
-            importance = np.argsort(clf.feature_importances_)[-100:]
+            importance = np.argsort(clf.feature_importances_)[-250:]
             importances.append(importance)
 
         for i, model_dirpath in enumerate(sorted(os.listdir(configure_models_dirpath))):
@@ -249,10 +249,10 @@ def train_model(data, summary_size):
     X_train = X[:,:-1*summary_size]
     y = data[:,-1]
     sc = StandardScaler()
-    clf_rf = RandomForestClassifier(n_estimators=100)
+    clf_rf = RandomForestClassifier(n_estimators=500)
     clf_lr = LogisticRegression()
     clf = clf_rf.fit(X_train, y)
-    importance = np.argsort(clf.feature_importances_)[-500:]
+    importance = np.argsort(clf.feature_importances_)[-1000:]
     X = np.concatenate((X_train[:,importance], X[:,-1*summary_size:]), axis=1)
     clf_svm = SVC(probability=True, kernel='rbf')
     parameters = {'gamma':[0.001,0.005,0.01,0.02], 'C':[0.1,1,10,100]}
@@ -262,9 +262,9 @@ def train_model(data, summary_size):
     eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm)], voting='soft')
     #clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
     X = sc.fit_transform(X)
-    eclf.fit(X,y)
+    clf_lr.fit(X,y)
 
-    return eclf, sc, importance
+    return clf_lr, sc, importance
 
 def custom_scoring_function(estimator, X, y):
     return roc_auc_score(y, estimator.predict_proba(X)[:,1])
