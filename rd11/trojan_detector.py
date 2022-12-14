@@ -262,9 +262,10 @@ def train_model(data, summary_size):
     eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm)], voting='soft')
     #clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
     X = sc.fit_transform(X)
-    clf_lr.fit(X,y)
+    X = scale(X, axis=1)
+    clf_rf.fit(X,y)
 
-    return clf_lr, sc, importance
+    return clf_rf, sc, importance
 
 def custom_scoring_function(estimator, X, y):
     return roc_auc_score(y, estimator.predict_proba(X)[:,1])
