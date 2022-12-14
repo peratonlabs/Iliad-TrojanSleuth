@@ -63,8 +63,8 @@ def trojan_detector(model_filepath,
         if features != None:
 
             features = np.array(features.detach().cpu()).reshape(1,-1)
-            features_full = np.concatenate((features[:,overall_importances], features[:,-1*summary_size:]), axis=1)
-            trojan_probability = clf.predict_proba(scale(scaler.transform(features_full),axis=1))[0][1]
+            #features_full = np.concatenate((features[:,overall_importances], features[:,-1*summary_size:]), axis=1)
+            trojan_probability = clf.predict_proba(scale(scaler.transform(features[:,overall_importances]),axis=1))[0][1]
 
             logging.info('Trojan Probability: {}'.format(trojan_probability))
 
@@ -261,7 +261,7 @@ def train_model(data, summary_size):
     clf_svm = GridSearchCV(clf_svm, parameters)
     eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm)], voting='soft')
     #clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
-    X = sc.fit_transform(X)
+    X = sc.fit_transform(X_train[:,importance])
     X = scale(X, axis=1)
     clf_rf.fit(X,y)
 
