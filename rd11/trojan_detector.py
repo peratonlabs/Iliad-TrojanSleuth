@@ -8,7 +8,7 @@ import cv2
 import json
 import jsonschema
 from joblib import load, dump
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, scale
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import GridSearchCV
 from sklearn.model_selection import cross_val_score
@@ -64,7 +64,7 @@ def trojan_detector(model_filepath,
 
             features = np.array(features.detach().cpu()).reshape(1,-1)
             features_full = np.concatenate((features[:,overall_importances], features[:,-1*summary_size:]), axis=1)
-            trojan_probability = clf.predict_proba(scaler.transform(features_full))[0][1]
+            trojan_probability = clf.predict_proba(scale(scaler.transform(features_full),axis=1))[0][1]
 
             logging.info('Trojan Probability: {}'.format(trojan_probability))
 
