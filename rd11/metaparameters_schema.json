@@ -3,7 +3,7 @@
   "title": "Algorithm Meta-Parameters",
   "technique": "Weight analysis",
   "technique_description": "Train a classifier on the most important weights according to a random forest, as well as summary statistics of the last layer.",
-  "technique_changes": "Add summary statistics",
+  "technique_changes": "1000 trees, 1250 features",
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd11",
   "required": [ ],
