@@ -1,90 +1,30 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Peraton Trojan Detection Container.",
-  "technique": "Weight analysis",
-  "technique_description": "Extracts the most important parameters from each architecture type, and trains a random forest for each of them.",
-  "technique_changes": "Initial submission",
+  "technique": "Gradient classifier",
+  "technique_description": "Computes gradients with respect to random noise, and takes the average to form a feature vector. A SVM is then trained on these feature vectors.",
+  "technique_changes": "Weight analysis replaced with gradient classifier",
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd12",
-  "required": ["train_num_features", "train_num_features_per_layer", "train_random_forest_regressor_param_n_estimators"],
+  "required": ["train_num_perturbations", "infer_num_perturbations"],
   "additionalProperties": false,
   "type": "object",
   "properties": {
-	"train_num_features":  {
-		"description": "The number of features to train on.",
-		"type": "integer",
-		"minimum": 5,
-		"maximum": 2000,
-		"suggested_minimum": 100,
-		"suggested_maximum": 1000
-	},
-	"train_num_features_per_layer":  {
-		"description": "The most important features to select from each layer for consideration in the final classifier.",
-		"type": "integer",
-		"minimum": 5,
-		"maximum": 100,
-		"suggested_minimum": 10,
-		"suggested_maximum": 100
-	},
-	"train_random_forest_regressor_param_n_estimators": {
-		"description": "Number of trees in the forest.",
+	"train_num_perturbations":  {
+		"description": "Number of random noise perturbations to apply. Each will have a gradient calculated, which is averaged into a feature vector.",
 		"type": "integer",
 		"minimum": 1,
 		"maximum": 1000,
-		"suggested_minimum": 50,
-		"suggested_maximum": 1000
+		"suggested_minimum": 10,
+		"suggested_maximum": 100
 	},
-	"train_random_forest_regressor_param_criterion": {
-		"description": "Function to measure the quality of a split.",
-		"enum": ["squared_error", "absolute_error", "friedman_mse", "poisson"]
-	},
-	"train_random_forest_regressor_param_max_depth": {
-		"description": "The maximum depth of the tree",
+	"infer_num_perturbations":  {
+		"description": "Number of random noise perturbations to apply. Each will have a gradient calculated, which is averaged into a feature vector.",
 		"type": "integer",
 		"minimum": 1,
-		"maximum": 20,
-		"suggested_minimum": 1,
-		"suggested_maximum": 20
-	},
-	"train_random_forest_regressor_param_min_samples_split": {
-		"description": "The minimum number of samples required to split an internal node.",
-		"type": "integer",
-		"minimum": 1,
-		"maximum": 5,
-		"suggested_minimum": 1,
-		"suggested_maximum": 2
-	},
-	"train_random_forest_regressor_param_min_samples_leaf": {
-		"description": "The minimum number of samples required to be at a leaf node.",
-		"type": "integer",
-		"minimum": 1,
-		"maximum": 5,
-		"suggested_minimum": 1,
-		"suggested_maximum": 2
-	},
-	"train_random_forest_regressor_param_min_weight_fraction_leaf": {
-		"description": "The minimum weighted fraction of the sum total of weights (of all the input samples) required to be at a leaf node.",
-		"type": "number",
-		"minimum": 0.0,
-		"maximum": 1.0,
-		"suggested_minimum": 0.0,
-		"suggested_maximum": 1.0
-	},
-	"train_random_forest_regressor_param_max_features": {
-		"description": "The number of features to consider when looking for the best split.",
-		"type": "number",
-		"minimum": 0.0,
-		"maximum": 2.0,
-		"suggested_minimum": 0.0,
-		"suggested_maximum": 2.0
-	},
-	"train_random_forest_regressor_param_min_impurity_decrease": {
-		"description": "A node will be split if this split induces a decrease of the impurity greater than or equal to this value.",
-		"type": "number",
-		"minimum": 0.0,
-		"maximum": 2.0,
-		"suggested_minimum": 0.0,
-		"suggested_maximum": 2.0
+		"maximum": 1000,
+		"suggested_minimum": 10,
+		"suggested_maximum": 100
 	}
   }
 }
