@@ -84,6 +84,13 @@ class Detector(AbstractDetector):
         gradient_data_points = []
         labels = []
 
+        # scaler = StandardScaler()
+
+        # scale_params = np.load(self.scale_parameters_filepath)
+
+        # scaler.mean_ = scale_params[0]
+        # scaler.scale_ = scale_params[1]
+
         num_perturb = self.train_num_perturbations
         for i, model in enumerate(model_path_list):
             label = np.loadtxt(join(model, 'ground_truth.csv'), dtype=bool)
@@ -91,8 +98,16 @@ class Detector(AbstractDetector):
             gradient_list = []
             model_pt = torch.load(join(model, "model.pt")).to(device)
 
-            for _ in range(num_perturb):
-                perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)
+            # sample_feature_vectors = []
+            # # Inference on models
+            # for examples_dir_entry in os.scandir(join(model,"clean-example-data")):
+            #     if examples_dir_entry.is_file() and examples_dir_entry.name.endswith(".npy"):
+            #         feature_vector = np.load(examples_dir_entry.path).reshape(1, -1)
+            #         feature_vector = torch.from_numpy(scaler.transform(feature_vector.astype(float))).float().to(device)
+            #         sample_feature_vectors.append(feature_vector)
+
+            for j in range(num_perturb):
+                perturbation = torch.FloatTensor(np.random.uniform(-0.5,0.5,(1,135))).to(device)# + sample_feature_vectors[j%len(sample_feature_vectors)]
                 perturbation.requires_grad = True
                 logits = model_pt(perturbation)#.cpu()
                 gradients = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
@@ -142,9 +157,9 @@ class Detector(AbstractDetector):
 
         clf = clf_svm
 
-        scores = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_scoring_function, n_jobs=5)
+        scores = cross_val_score(clf, dt_X, dt_y, cv=10, scoring=self.custom_scoring_function, n_jobs=5)
         print(scores.mean())
-        losses = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_loss_function, n_jobs=5)
+        losses = cross_val_score(clf, dt_X, dt_y, cv=10, scoring=self.custom_loss_function, n_jobs=5)
         print(losses.mean())
 
         clf = clf.fit(dt_X, dt_y)
