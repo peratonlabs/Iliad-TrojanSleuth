@@ -115,12 +115,18 @@ class Detector(AbstractDetector):
                                                 only_inputs=True, retain_graph=True)[0]
 
                 gradient0 = gradients[0]
+                #print(gradient0.shape)
+                gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
+                                grad_outputs=torch.ones(logits[0][1].size()), 
+                                only_inputs=True, retain_graph=True)[0]
+                gradient1 = gradients[0]
+                gradient = torch.cat((gradient0, gradient1), axis=0)
                 #print(gradient.shape)
-                gradient_list.append(gradient0)
+                gradient_list.append(gradient)
                 model_pt.zero_grad()
-            gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,135)
+            gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,270)
             gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
-            gradient_data_points.append(gradient_mean.reshape(135))
+            gradient_data_points.append(gradient_mean.reshape(270))
 
         results = np.array(gradient_data_points)
         np_labels = np.expand_dims(np.array(labels),-1)
@@ -157,15 +163,20 @@ class Detector(AbstractDetector):
 
         clf = clf_svm
 
-        scores = cross_val_score(clf, dt_X, dt_y, cv=10, scoring=self.custom_scoring_function, n_jobs=5)
+        scores = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_accuracy_function, n_jobs=5)
         print(scores.mean())
-        losses = cross_val_score(clf, dt_X, dt_y, cv=10, scoring=self.custom_loss_function, n_jobs=5)
+        scores = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_scoring_function, n_jobs=5)
+        print(scores.mean())
+        losses = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_loss_function, n_jobs=5)
         print(losses.mean())
 
         clf = clf.fit(dt_X, dt_y)
         #print(clf_svm.cv_results_)
 
         return clf
+
+    def custom_accuracy_function(self, estimator, X, y):
+        return estimator.score(X, y)
 
     def custom_scoring_function(self, estimator, X, y):
         return roc_auc_score(y, estimator.predict_proba(X)[:,1])
@@ -232,7 +243,7 @@ class Detector(AbstractDetector):
         model_pt = torch.load(model_filepath).to(device)
 
         for _ in range(num_perturb):
-            perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)
+            perturbation = torch.FloatTensor(np.random.uniform(-0.5,0.5,(1,135))).to(device)
             perturbation.requires_grad = True
             logits = model_pt(perturbation)#.cpu()
             gradients = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
@@ -240,11 +251,16 @@ class Detector(AbstractDetector):
                                             only_inputs=True, retain_graph=True)[0]
 
             gradient0 = gradients[0]
-            gradient_list.append(gradient0)
+            gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
+                grad_outputs=torch.ones(logits[0][1].size()), 
+                only_inputs=True, retain_graph=True)[0]
+            gradient1 = gradients[0]
+            gradient = torch.cat((gradient0, gradient1), axis=0)
+            gradient_list.append(gradient)
             model_pt.zero_grad()
-        gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,135)
+        gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,270)
         gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
-        gradient_data_points.append(gradient_mean.reshape(135))
+        gradient_data_points.append(gradient_mean.reshape(270))
 
         results = np.array(gradient_data_points)
 
