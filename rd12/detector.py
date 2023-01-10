@@ -107,7 +107,7 @@ class Detector(AbstractDetector):
             #         sample_feature_vectors.append(feature_vector)
 
             for j in range(num_perturb):
-                perturbation = torch.FloatTensor(np.random.uniform(-0.5,0.5,(1,135))).to(device)# + sample_feature_vectors[j%len(sample_feature_vectors)]
+                perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)# + sample_feature_vectors[j%len(sample_feature_vectors)]
                 perturbation.requires_grad = True
                 logits = model_pt(perturbation)#.cpu()
                 gradients = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
@@ -243,7 +243,7 @@ class Detector(AbstractDetector):
         model_pt = torch.load(model_filepath).to(device)
 
         for _ in range(num_perturb):
-            perturbation = torch.FloatTensor(np.random.uniform(-0.5,0.5,(1,135))).to(device)
+            perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)
             perturbation.requires_grad = True
             logits = model_pt(perturbation)#.cpu()
             gradients = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
