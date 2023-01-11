@@ -12,7 +12,7 @@ import numpy as np
 from tqdm import tqdm
 import torch
 
-from sklearn.preprocessing import StandardScaler, scale
+from sklearn.preprocessing import StandardScaler, scale, normalize
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import cross_val_score, GridSearchCV
 from sklearn.metrics import roc_auc_score, log_loss
@@ -110,23 +110,23 @@ class Detector(AbstractDetector):
                 perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)# + sample_feature_vectors[j%len(sample_feature_vectors)]
                 perturbation.requires_grad = True
                 logits = model_pt(perturbation)#.cpu()
-                gradients = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
-                                                grad_outputs=torch.ones(logits[0][0].size()), 
+                gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
+                                                grad_outputs=torch.ones(logits[0][1].size()), 
                                                 only_inputs=True, retain_graph=True)[0]
 
                 gradient0 = gradients[0]
                 #print(gradient0.shape)
-                gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
-                                grad_outputs=torch.ones(logits[0][1].size()), 
-                                only_inputs=True, retain_graph=True)[0]
-                gradient1 = gradients[0]
-                gradient = torch.cat((gradient0, gradient1), axis=0)
+                # gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
+                #                 grad_outputs=torch.ones(logits[0][1].size()), 
+                #                 only_inputs=True, retain_graph=True)[0]
+                # gradient1 = gradients[0]
+                # gradient = torch.cat((gradient0, gradient1), axis=0)
                 #print(gradient.shape)
-                gradient_list.append(gradient)
+                gradient_list.append(gradient0)
                 model_pt.zero_grad()
-            gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,270)
+            gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,135)
             gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
-            gradient_data_points.append(gradient_mean.reshape(270))
+            gradient_data_points.append(gradient_mean.reshape(135))
 
         results = np.array(gradient_data_points)
         np_labels = np.expand_dims(np.array(labels),-1)
@@ -151,13 +151,15 @@ class Detector(AbstractDetector):
         parameters = {'gamma':[0.001,0.01,0.1], 'C':[1,10]}
         clf_svm = GridSearchCV(clf_svm, parameters)
         #clf_svm = BaggingClassifier(estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
-        #clf_rf = RandomForestClassifier(n_estimators=500)
-        #clf_lr = LogisticRegression()
+        clf_rf = RandomForestClassifier(n_estimators=500)
+        clf_rf = CalibratedClassifierCV(clf_rf, ensemble=False)
+        clf_lr = LogisticRegression()
 
         idx = np.random.choice(results.shape[0], size=results.shape[0], replace=False)
         dt = results[idx, :]
         print(dt.shape)
         dt_X = dt[:,:-1].astype(np.float32)
+        dt_X = scale(dt_X, axis=1)
         dt_y = dt[:,-1].astype(np.float32)
         dt_y = dt_y.astype(int)
 
@@ -179,10 +181,10 @@ class Detector(AbstractDetector):
         return estimator.score(X, y)
 
     def custom_scoring_function(self, estimator, X, y):
-        return roc_auc_score(y, np.clip(estimator.predict_proba(X)[:,1], 0.01, 0.99))
+        return roc_auc_score(y, estimator.predict_proba(X)[:,1])
         
     def custom_loss_function(self, estimator, X, y):
-        return log_loss(y, np.clip(estimator.predict_proba(X)[:,1], 0.01, 0.99))
+        return log_loss(y, estimator.predict_proba(X)[:,1])
 
     def inference_on_example_data(self, model, examples_dirpath):
         """Method to demonstrate how to inference on a round's example data.
@@ -246,28 +248,29 @@ class Detector(AbstractDetector):
             perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)
             perturbation.requires_grad = True
             logits = model_pt(perturbation)#.cpu()
-            gradients = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
-                                            grad_outputs=torch.ones(logits[0][0].size()), 
+            gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
+                                            grad_outputs=torch.ones(logits[0][1].size()), 
                                             only_inputs=True, retain_graph=True)[0]
 
             gradient0 = gradients[0]
-            gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
-                grad_outputs=torch.ones(logits[0][1].size()), 
-                only_inputs=True, retain_graph=True)[0]
-            gradient1 = gradients[0]
-            gradient = torch.cat((gradient0, gradient1), axis=0)
-            gradient_list.append(gradient)
+            # gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
+            #     grad_outputs=torch.ones(logits[0][1].size()), 
+            #     only_inputs=True, retain_graph=True)[0]
+            # gradient1 = gradients[0]
+            # gradient = torch.cat((gradient0, gradient1), axis=0)
+            gradient_list.append(gradient0)
             model_pt.zero_grad()
-        gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,270)
+        gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,135)
         gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
-        gradient_data_points.append(gradient_mean.reshape(270))
+        gradient_data_points.append(gradient_mean.reshape(135))
 
         results = np.array(gradient_data_points)
+        results = scale(results, axis=1)
 
         with open(join(self.learned_parameters_dirpath, "clf.joblib"), "rb") as fp:
             clf = pickle.load(fp)
 
-        trojan_probability = np.clip(clf.predict_proba(results)[0][1], 0.01, 0.99)
+        trojan_probability = clf.predict_proba(results)[0][1]
 
         probability = str(trojan_probability)
         with open(result_filepath, "w") as fp:
