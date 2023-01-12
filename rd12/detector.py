@@ -163,7 +163,7 @@ class Detector(AbstractDetector):
         dt_y = dt[:,-1].astype(np.float32)
         dt_y = dt_y.astype(int)
 
-        clf = clf_lr
+        clf = clf_svm
 
         scores = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_accuracy_function, n_jobs=5)
         print(scores.mean())
@@ -181,10 +181,10 @@ class Detector(AbstractDetector):
         return estimator.score(X, y)
 
     def custom_scoring_function(self, estimator, X, y):
-        return roc_auc_score(y, estimator.predict_proba(X)[:,1])
+        return roc_auc_score(y, np.clip(estimator.predict_proba(X)[:,1], 0.01, 0.99))
         
     def custom_loss_function(self, estimator, X, y):
-        return log_loss(y, estimator.predict_proba(X)[:,1])
+        return log_loss(y, np.clip(estimator.predict_proba(X)[:,1], 0.01, 0.99))
 
     def inference_on_example_data(self, model, examples_dirpath):
         """Method to demonstrate how to inference on a round's example data.
@@ -270,7 +270,7 @@ class Detector(AbstractDetector):
         with open(join(self.learned_parameters_dirpath, "clf.joblib"), "rb") as fp:
             clf = pickle.load(fp)
 
-        trojan_probability = clf.predict_proba(results)[0][1]
+        trojan_probability = np.clip(clf.predict_proba(results)[0][1], 0.01, 0.99)
 
         probability = str(trojan_probability)
         with open(result_filepath, "w") as fp:
