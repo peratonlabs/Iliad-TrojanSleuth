@@ -163,7 +163,7 @@ class Detector(AbstractDetector):
         dt_y = dt[:,-1].astype(np.float32)
         dt_y = dt_y.astype(int)
 
-        clf = clf_svm
+        clf = clf_lr
 
         scores = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_accuracy_function, n_jobs=5)
         print(scores.mean())
