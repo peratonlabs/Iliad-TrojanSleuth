@@ -181,10 +181,10 @@ class Detector(AbstractDetector):
         return estimator.score(X, y)
 
     def custom_scoring_function(self, estimator, X, y):
-        return roc_auc_score(y, np.clip(estimator.predict_proba(X)[:,1], 0.05, 0.95))
+        return roc_auc_score(y, np.clip(estimator.predict_proba(X)[:,1], 0.07, 0.93))
         
     def custom_loss_function(self, estimator, X, y):
-        return log_loss(y, np.clip(estimator.predict_proba(X)[:,1], 0.05, 0.95))
+        return log_loss(y, np.clip(estimator.predict_proba(X)[:,1], 0.07, 0.93))
 
     def inference_on_example_data(self, model, examples_dirpath):
         """Method to demonstrate how to inference on a round's example data.
@@ -270,7 +270,7 @@ class Detector(AbstractDetector):
         with open(join(self.learned_parameters_dirpath, "clf.joblib"), "rb") as fp:
             clf = pickle.load(fp)
 
-        trojan_probability = np.clip(clf.predict_proba(results)[0][1], 0.05, 0.95)
+        trojan_probability = np.clip(clf.predict_proba(results)[0][1], 0.07, 0.93)
 
         probability = str(trojan_probability)
         with open(result_filepath, "w") as fp:
