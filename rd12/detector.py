@@ -148,7 +148,7 @@ class Detector(AbstractDetector):
     def train_model(self, results):
 
         clf_svm = SVC(probability=True, kernel='rbf')
-        parameters = {'gamma':[0.001,0.01,0.1], 'C':[1,10]}
+        parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.01,0.1,1,10]}
         clf_svm = GridSearchCV(clf_svm, parameters)
         clf_svm = BaggingClassifier(estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
         clf_rf = RandomForestClassifier(n_estimators=500)
