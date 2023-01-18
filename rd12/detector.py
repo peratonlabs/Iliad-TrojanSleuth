@@ -14,7 +14,7 @@ import torch
 
 from sklearn.preprocessing import StandardScaler, scale, normalize
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.model_selection import cross_val_score, GridSearchCV
+from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split
 from sklearn.metrics import roc_auc_score, log_loss
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier, RandomForestRegressor, BaggingClassifier
@@ -105,7 +105,7 @@ class Detector(AbstractDetector):
             #         feature_vector = np.load(examples_dir_entry.path).reshape(1, -1)
             #         feature_vector = torch.from_numpy(scaler.transform(feature_vector.astype(float))).float().to(device)
             #         sample_feature_vectors.append(feature_vector)
-
+            #np.random.seed(0)
             for j in range(num_perturb):
                 perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)# + sample_feature_vectors[j%len(sample_feature_vectors)]
                 perturbation.requires_grad = True
@@ -116,17 +116,18 @@ class Detector(AbstractDetector):
 
                 gradient0 = gradients[0]
                 #print(gradient0.shape)
-                # gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
-                #                 grad_outputs=torch.ones(logits[0][1].size()), 
-                #                 only_inputs=True, retain_graph=True)[0]
-                # gradient1 = gradients[0]
-                # gradient = torch.cat((gradient0, gradient1), axis=0)
+                gradients = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
+                                grad_outputs=torch.ones(logits[0][0].size()), 
+                                only_inputs=True, retain_graph=True)[0]
+                gradient1 = gradients[0]
+                gradient = torch.cat((gradient0, gradient1), axis=0)
                 #print(gradient.shape)
-                gradient_list.append(gradient0)
+                gradient_list.append(gradient)
                 model_pt.zero_grad()
-            gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,135)
+            gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,270)
             gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
-            gradient_data_points.append(gradient_mean.reshape(135))
+            #print(np.flip(np.sort(gradient_mean))[:5], np.flip(np.argsort(gradient_mean))[:5])
+            gradient_data_points.append(gradient_mean.reshape(270))
 
         results = np.array(gradient_data_points)
         np_labels = np.expand_dims(np.array(labels),-1)
@@ -148,12 +149,13 @@ class Detector(AbstractDetector):
     def train_model(self, results):
 
         clf_svm = SVC(probability=True, kernel='rbf')
-        parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.01,0.1,1,10]}
+        parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.001,0.01,0.1,1,10]}
         clf_svm = GridSearchCV(clf_svm, parameters)
         clf_svm = BaggingClassifier(estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
         clf_rf = RandomForestClassifier(n_estimators=500)
-        clf_rf = CalibratedClassifierCV(clf_rf, ensemble=False)
+        #clf_rf = CalibratedClassifierCV(clf_rf, ensemble=False)
         clf_lr = LogisticRegression()
+        #np.random.seed(0)
 
         idx = np.random.choice(results.shape[0], size=results.shape[0], replace=False)
         dt = results[idx, :]
@@ -172,10 +174,24 @@ class Detector(AbstractDetector):
         losses = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_loss_function, n_jobs=5)
         print(losses.mean())
 
+        #print(self.cross_val(clf, dt_X, dt_y, 5, self.custom_accuracy_function, clf_rf))
+        #print(self.cross_val(clf, dt_X, dt_y, 5, self.custom_scoring_function, clf_rf))
+        #print(self.cross_val(clf, dt_X, dt_y, 5, self.custom_loss_function, clf_rf))
+
         clf = clf.fit(dt_X, dt_y)
         #print(clf_svm.cv_results_)
 
         return clf
+
+    def cross_val(self, clf, X, y, folds, scorer, clf_rf):
+        scores = []
+        for _ in range(folds):
+            x_train, x_test, y_train, y_test = train_test_split(X, y, test_size = 1/folds)
+            clf_rf.fit(x_train, y_train)
+            importance = np.argsort(clf_rf.feature_importances_)[-100:]
+            clf.fit(x_train[:,importance], y_train)
+            scores.append(scorer(clf, x_test[:,importance], y_test))
+        return np.mean(scores)
 
     def custom_accuracy_function(self, estimator, X, y):
         return estimator.score(X, y)
@@ -253,16 +269,16 @@ class Detector(AbstractDetector):
                                             only_inputs=True, retain_graph=True)[0]
 
             gradient0 = gradients[0]
-            # gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
-            #     grad_outputs=torch.ones(logits[0][1].size()), 
-            #     only_inputs=True, retain_graph=True)[0]
-            # gradient1 = gradients[0]
-            # gradient = torch.cat((gradient0, gradient1), axis=0)
-            gradient_list.append(gradient0)
+            gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
+                grad_outputs=torch.ones(logits[0][1].size()), 
+                only_inputs=True, retain_graph=True)[0]
+            gradient1 = gradients[0]
+            gradient = torch.cat((gradient0, gradient1), axis=0)
+            gradient_list.append(gradient)
             model_pt.zero_grad()
-        gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,135)
+        gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,270)
         gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
-        gradient_data_points.append(gradient_mean.reshape(135))
+        gradient_data_points.append(gradient_mean.reshape(270))
 
         results = np.array(gradient_data_points)
         results = scale(results, axis=1)
