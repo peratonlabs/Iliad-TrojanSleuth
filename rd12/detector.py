@@ -269,8 +269,8 @@ class Detector(AbstractDetector):
                                             only_inputs=True, retain_graph=True)[0]
 
             gradient0 = gradients[0]
-            gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
-                grad_outputs=torch.ones(logits[0][1].size()), 
+            gradients = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
+                grad_outputs=torch.ones(logits[0][0].size()), 
                 only_inputs=True, retain_graph=True)[0]
             gradient1 = gradients[0]
             gradient = torch.cat((gradient0, gradient1), axis=0)
