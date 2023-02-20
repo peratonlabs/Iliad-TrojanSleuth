@@ -1,6 +1,7 @@
 import os
 from os import listdir, makedirs
 from os.path import join, exists, basename
+import copy
 import json
 import logging
 import pickle
@@ -17,7 +18,7 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split
 from sklearn.metrics import roc_auc_score, log_loss
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier, RandomForestRegressor, BaggingClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier, RandomForestRegressor, BaggingClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
 
 
@@ -84,32 +85,19 @@ class Detector(AbstractDetector):
         gradient_data_points = []
         labels = []
 
-        # scaler = StandardScaler()
-
-        # scale_params = np.load(self.scale_parameters_filepath)
-
-        # scaler.mean_ = scale_params[0]
-        # scaler.scale_ = scale_params[1]
-
         num_perturb = self.train_num_perturbations
+
         for i, model in enumerate(model_path_list):
             label = np.loadtxt(join(model, 'ground_truth.csv'), dtype=bool)
             labels.append(int(label))
             gradient_list = []
             model_pt = torch.load(join(model, "model.pt")).to(device)
 
-            # sample_feature_vectors = []
-            # # Inference on models
-            # for examples_dir_entry in os.scandir(join(model,"clean-example-data")):
-            #     if examples_dir_entry.is_file() and examples_dir_entry.name.endswith(".npy"):
-            #         feature_vector = np.load(examples_dir_entry.path).reshape(1, -1)
-            #         feature_vector = torch.from_numpy(scaler.transform(feature_vector.astype(float))).float().to(device)
-            #         sample_feature_vectors.append(feature_vector)
-            #np.random.seed(0)
+            # Inference on models
             for j in range(num_perturb):
-                perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)# + sample_feature_vectors[j%len(sample_feature_vectors)]
+                perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)
                 perturbation.requires_grad = True
-                logits = model_pt(perturbation)#.cpu()
+                logits = model_pt(perturbation)
                 gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
                                                 grad_outputs=torch.ones(logits[0][1].size()), 
                                                 only_inputs=True, retain_graph=True)[0]
@@ -117,22 +105,22 @@ class Detector(AbstractDetector):
                 gradient0 = gradients[0]
                 #print(gradient0.shape)
                 gradients = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
-                                grad_outputs=torch.ones(logits[0][0].size()), 
-                                only_inputs=True, retain_graph=True)[0]
+                                 grad_outputs=torch.ones(logits[0][0].size()), 
+                                 only_inputs=True, retain_graph=True)[0]
                 gradient1 = gradients[0]
                 gradient = torch.cat((gradient0, gradient1), axis=0)
                 #print(gradient.shape)
                 gradient_list.append(gradient)
                 model_pt.zero_grad()
-            gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,270)
+            gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,135*2)
             gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
-            #print(np.flip(np.sort(gradient_mean))[:5], np.flip(np.argsort(gradient_mean))[:5])
-            gradient_data_points.append(gradient_mean.reshape(270))
+            gradient_data_points.append(gradient_mean.reshape(135*2))
 
         results = np.array(gradient_data_points)
         np_labels = np.expand_dims(np.array(labels),-1)
         #print(results.shape, np_labels.shape)
         results = np.concatenate((results, np_labels), axis=1)
+
 
         logging.info("Training classifier...")
         model = self.train_model(results)
@@ -151,15 +139,19 @@ class Detector(AbstractDetector):
         clf_svm = SVC(probability=True, kernel='rbf')
         parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.001,0.01,0.1,1,10]}
         clf_svm = GridSearchCV(clf_svm, parameters)
-        clf_svm = BaggingClassifier(estimator=clf_svm, n_estimators=6, max_features=0.83, bootstrap=True)
-        clf_rf = RandomForestClassifier(n_estimators=500)
-        #clf_rf = CalibratedClassifierCV(clf_rf, ensemble=False)
-        clf_lr = LogisticRegression()
+        clf_svm = BaggingClassifier(estimator=clf_svm, n_estimators=6, max_features=0.83, bootstrap=False)
+        clf_svm = CalibratedClassifierCV(clf_svm, ensemble=True)
+        #clf_rf = RandomForestClassifier(n_estimators=500)
+        #clf_lr = LogisticRegression()
+        #clf_gb = GradientBoostingClassifier(n_estimators=250)
+        #parameters = {'loss':["log_loss","exponential"], 'learning_rate':[0.01,0.05,0.1] }
+        #clf_gb = GridSearchCV(clf_gb, parameters)
         #np.random.seed(0)
 
         idx = np.random.choice(results.shape[0], size=results.shape[0], replace=False)
         dt = results[idx, :]
-        print(dt.shape)
+        #print(dt.shape)
+        #print(dt)
         dt_X = dt[:,:-1].astype(np.float32)
         dt_X = scale(dt_X, axis=1)
         dt_y = dt[:,-1].astype(np.float32)
@@ -167,19 +159,14 @@ class Detector(AbstractDetector):
 
         clf = clf_svm
 
-        scores = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_accuracy_function, n_jobs=5)
-        print(scores.mean())
-        scores = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_scoring_function, n_jobs=5)
-        print(scores.mean())
-        losses = cross_val_score(clf, dt_X, dt_y, cv=5, scoring=self.custom_loss_function, n_jobs=5)
-        print(losses.mean())
-
-        #print(self.cross_val(clf, dt_X, dt_y, 5, self.custom_accuracy_function, clf_rf))
-        #print(self.cross_val(clf, dt_X, dt_y, 5, self.custom_scoring_function, clf_rf))
-        #print(self.cross_val(clf, dt_X, dt_y, 5, self.custom_loss_function, clf_rf))
+        scores = cross_val_score(clf, dt_X, dt_y, cv=3, scoring=self.custom_accuracy_function, n_jobs=5)
+        #print(scores.mean())
+        scores = cross_val_score(clf, dt_X, dt_y, cv=3, scoring=self.custom_scoring_function, n_jobs=5)
+        #print(scores.mean())
+        losses = cross_val_score(clf, dt_X, dt_y, cv=3, scoring=self.custom_loss_function, n_jobs=5)
+        #print(losses.mean())
 
         clf = clf.fit(dt_X, dt_y)
-        #print(clf_svm.cv_results_)
 
         return clf
 
@@ -259,25 +246,25 @@ class Detector(AbstractDetector):
         num_perturb = self.infer_num_perturbations
         gradient_list = []
         model_pt = torch.load(model_filepath).to(device)
-
+        loss_object = torch.nn.CrossEntropyLoss()
         for _ in range(num_perturb):
             perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)
             perturbation.requires_grad = True
-            logits = model_pt(perturbation)#.cpu()
-            gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
+            logits = model_pt(perturbation)
+            gradient0 = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
                                             grad_outputs=torch.ones(logits[0][1].size()), 
-                                            only_inputs=True, retain_graph=True)[0]
+                                            only_inputs=True, retain_graph=True)[0][0]
 
-            gradient0 = gradients[0]
-            gradients = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
-                grad_outputs=torch.ones(logits[0][0].size()), 
-                only_inputs=True, retain_graph=True)[0]
-            gradient1 = gradients[0]
+            gradient1 = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
+                                grad_outputs=torch.ones(logits[0][0].size()), 
+                                only_inputs=True, retain_graph=True)[0][0]
             gradient = torch.cat((gradient0, gradient1), axis=0)
+            #print(gradient.shape)
             gradient_list.append(gradient)
             model_pt.zero_grad()
         gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,270)
         gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
+        gradient_std = torch.std(gradients, dim=0).cpu().numpy()
         gradient_data_points.append(gradient_mean.reshape(270))
 
         results = np.array(gradient_data_points)
