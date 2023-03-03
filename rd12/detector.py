@@ -95,7 +95,7 @@ class Detector(AbstractDetector):
 
             # Inference on models
             for j in range(num_perturb):
-                perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)
+                perturbation = torch.FloatTensor(np.random.uniform(-1,1,(1,135))).to(device)
                 perturbation.requires_grad = True
                 logits = model_pt(perturbation)
                 gradients = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
@@ -140,7 +140,7 @@ class Detector(AbstractDetector):
         parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.001,0.01,0.1,1,10]}
         clf_svm = GridSearchCV(clf_svm, parameters)
         clf_svm = BaggingClassifier(estimator=clf_svm, n_estimators=6, max_features=0.83, bootstrap=False)
-        clf_svm = CalibratedClassifierCV(clf_svm, ensemble=True)
+        clf_svm = CalibratedClassifierCV(clf_svm, ensemble=False)
         #clf_rf = RandomForestClassifier(n_estimators=500)
         #clf_lr = LogisticRegression()
         #clf_gb = GradientBoostingClassifier(n_estimators=250)
@@ -184,10 +184,10 @@ class Detector(AbstractDetector):
         return estimator.score(X, y)
 
     def custom_scoring_function(self, estimator, X, y):
-        return roc_auc_score(y, np.clip(estimator.predict_proba(X)[:,1], 0.07, 0.93))
+        return roc_auc_score(y, np.clip(estimator.predict_proba(X)[:,1], 0.05, 0.95))
         
     def custom_loss_function(self, estimator, X, y):
-        return log_loss(y, np.clip(estimator.predict_proba(X)[:,1], 0.07, 0.93))
+        return log_loss(y, np.clip(estimator.predict_proba(X)[:,1], 0.05, 0.95))
 
     def inference_on_example_data(self, model, examples_dirpath):
         """Method to demonstrate how to inference on a round's example data.
@@ -246,9 +246,8 @@ class Detector(AbstractDetector):
         num_perturb = self.infer_num_perturbations
         gradient_list = []
         model_pt = torch.load(model_filepath).to(device)
-        loss_object = torch.nn.CrossEntropyLoss()
         for _ in range(num_perturb):
-            perturbation = torch.FloatTensor(np.random.normal(0,1,(1,135))).to(device)
+            perturbation = torch.FloatTensor(np.random.uniform(-1,1,(1,135))).to(device)
             perturbation.requires_grad = True
             logits = model_pt(perturbation)
             gradient0 = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
@@ -264,7 +263,7 @@ class Detector(AbstractDetector):
             model_pt.zero_grad()
         gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,270)
         gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
-        gradient_std = torch.std(gradients, dim=0).cpu().numpy()
+        #gradient_std = torch.std(gradients, dim=0).cpu().numpy()
         gradient_data_points.append(gradient_mean.reshape(270))
 
         results = np.array(gradient_data_points)
@@ -273,7 +272,7 @@ class Detector(AbstractDetector):
         with open(join(self.learned_parameters_dirpath, "clf.joblib"), "rb") as fp:
             clf = pickle.load(fp)
 
-        trojan_probability = np.clip(clf.predict_proba(results)[0][1], 0.07, 0.93)
+        trojan_probability = np.clip(clf.predict_proba(results)[0][1], 0.05, 0.95)
 
         probability = str(trojan_probability)
         with open(result_filepath, "w") as fp:
