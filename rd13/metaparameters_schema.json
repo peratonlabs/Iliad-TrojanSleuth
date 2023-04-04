@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Trojan Detection Container (Perspecta)",
+  "technique": "Random forest classifier",
+  "technique_description": "Attempts trigger reconstruction via the gradient, and applies the product to a portion of synthetic images. Statistics on the classification decisions of these modified samples are used to train a final classifier.",
+  "technique_changes": "Initial commit",
+  "technique_type": ["Trigger reconstruction"],
+  "commit_id": "",
+  "repo_name": "https://github.com/usnistgov/trojai-example",
+  "required": [],
+  "additionalProperties": false,
+  "type": "object",
+  "properties": {
+  }
+}
