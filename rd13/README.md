@@ -9,7 +9,6 @@ The container submitted for evaluation must perform trojan detection for a singl
 
 Your container will have access to these [Submission Compute Resources](https://pages.nist.gov/trojai/docs/architecture.html#compute-resources).
 
-
 --------------
 # Table of Contents
 1. [Reusing the example detector](#reusing-the-example-detector)

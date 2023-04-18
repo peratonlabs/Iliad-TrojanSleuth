@@ -4,14 +4,18 @@
 
 # You are solely responsible for determining the appropriateness of using and distributing the software and you assume all risks associated with its use, including but not limited to the risks and costs of program errors, compliance with applicable laws, damage to or loss of data, programs or equipment, and the unavailability or interruption of operation. This software is not intended to be used in any situation where a failure could cause risk of injury or damage to property. The software developed by NIST employees is not subject to copyright protection within the United States.
 
-
-import logging
 import os
+import logging
 import json
 import jsonpickle
 import pickle
-import numpy as np
 import copy
+
+import torch
+import torchvision
+import skimage.io
+from scipy import stats
+import numpy as np
 
 from sklearn.preprocessing import StandardScaler, scale, normalize
 from sklearn.calibration import CalibratedClassifierCV
@@ -26,12 +30,9 @@ from utils.abstract import AbstractDetector
 from utils.models import load_model, load_ground_truth
 from PIL import Image
 
-import torch
-import torchvision
-import skimage.io
-from scipy import stats
 
 Background_dirpath = "backgrounds"
+clean_models_dirpath = "/mnt/bigpool/ssd1/myudin/round13-train-dataset/models"
 
 def center_to_corners_format(x):
     """
@@ -87,7 +88,7 @@ class Detector(AbstractDetector):
         if not os.path.exists(self.learned_parameters_dirpath):
             os.makedirs(self.learned_parameters_dirpath)
 
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # List all available model
         model_path_list = sorted([os.path.join(models_dirpath, model) for model in os.listdir(models_dirpath)])
@@ -103,24 +104,27 @@ class Detector(AbstractDetector):
             return
 
 
-        for i, model_dir in enumerate(sorted(os.listdir(models_dirpath))[:10]):
+        for i, model_dir in enumerate(sorted(os.listdir(models_dirpath))[:]):
             #print(model_dir)
 
-            #if i < 4: continue
+            if i < 2: continue
 
-            model = torch.load(os.path.join(models_dirpath, model_dir, "model.pt"), map_location=torch.device(device))#.to(device)
+            model = torch.load(os.path.join(models_dirpath, model_dir, "model.pt"), map_location=torch.device(self.device))
             model.eval()
-            example_image = os.path.join(models_dirpath, model_dir, "clean-example-data/90.png")
 
-            augmentation_transforms = torchvision.transforms.Compose([torchvision.transforms.ConvertImageDtype(torch.float)])
+            clean_model = self.get_clean_model(clean_models_dirpath, models_dirpath, model_dir)
 
-            # img = skimage.io.imread(os.path.join(models_dirpath, model_dir, "poisoned-example-data/1.png"))
+            # example_image = os.path.join(models_dirpath, model_dir, "clean-example-data/90.png")
+
+            # augmentation_transforms = torchvision.transforms.Compose([torchvision.transforms.ConvertImageDtype(torch.float)])
+
+            # img = skimage.io.imread(os.path.join(models_dirpath, model_dir, "poisoned-example-data/105.png"))
             # image = torch.as_tensor(img)
             # # move channels first
             # image = image.permute((2, 0, 1))
             # # convert to float (which normalizes the values)
             # image = augmentation_transforms(image)
-            # image = image.to(device)
+            # image = image.to(self.device)
             # # Convert to NCHW
             # img = image.unsqueeze(0)
             # # wrap the network outputs into a list of annotations
@@ -128,23 +132,38 @@ class Detector(AbstractDetector):
             # print(pred, scores)
             # print(1/0)
 
-            images = self.generate_images(models_dirpath, model_dir, model, device)
+            images = self.generate_images(models_dirpath, model_dir, model)
             if images == None:
                 continue
 
             label = np.loadtxt(os.path.join(models_dirpath, model_dir, 'ground_truth.csv'), dtype=bool)
             labels.append(label)
             #print(1/0)
-            feature_vector = self.get_features(images, model, device)
-            features.append(feature_vector)
-            #print(features)
-            data = np.concatenate((np.array(features), np.expand_dims(np.array(labels),-1)), axis=1)
-            print(data)
-            np.savetxt("rd13.csv", data, delimiter=",")
+            feature_vector = self.get_features(images, model, clean_model)
+
+            # features.append(feature_vector)
+            # #print(features)
+            # data = np.concatenate((np.array(features), np.expand_dims(np.array(labels),-1)), axis=1)
+            # print(data)
+            # np.savetxt("rd13.csv", data, delimiter=",")
 
         self.save_results(data)
 
-    def get_features(self, images, model, device):
+    def get_clean_model(self, clean_models_dirpath, models_dirpath, model_dir):
+        config_file = os.path.join(models_dirpath, model_dir, "config.json")
+        with open(config_file) as f:
+            config = json.load(f)
+        arch = config["py/state"]["model_architecture"]
+        if arch == "object_detection:detr":
+            clean_model = torch.load(os.path.join(clean_models_dirpath, "id-00000001/model.pt"), map_location=torch.device(self.device))
+        if arch == "object_detection:fasterrcnn_resnet50_fpn_v2":
+            clean_model = torch.load(os.path.join(clean_models_dirpath, "id-00000003/model.pt"), map_location=torch.device(self.device))
+        if arch == "object_detection:ssd300_vgg16":
+            clean_model = torch.load(os.path.join(clean_models_dirpath, "id-00000000/model.pt"), map_location=torch.device(self.device))
+        clean_model.eval()
+        return clean_model
+    
+    def get_features(self, images, model, clean_model):
 
             train_len = 1
             val_len = 1
@@ -156,12 +175,14 @@ class Detector(AbstractDetector):
             tgts = []
             #trigger_fns = []
             src_classes = []
+            found = False
 
             all_labels = []
             all_confs = []
 
             for src_cls in images:
                 #if src_cls < 60: continue#9: continue
+                #if src_cls != 12: continue
                 #if int(image_class_dirpath) %3 != 1: continue
                 #print(src_cls)
                 #if isinstance(images[src_cls][0], int):
@@ -205,7 +226,7 @@ class Detector(AbstractDetector):
 
                     trigger_insertion_loc = 0
                     trigger_size = 20
-                    filter_shape = torch.zeros(new_data.shape).to(device)
+                    filter_shape = torch.zeros(new_data.shape).to(self.device)
                     filter_shape[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size] = 1
                     #print(new_data.shape, filter_shape.shape)
                     pred, scores = self.inference_sample(model, new_data, False, threshold)
@@ -213,25 +234,13 @@ class Detector(AbstractDetector):
                     #print(torch.max(new_data))
                     #print(pred)
 
-                    for iter_i in range(max_iter):
-                        new_data.requires_grad = True
-                        logits = self.get_logits(model, [new_data])
-                        #print(logits.shape)
-                        logit = logits[:,:,tgt_cls:tgt_cls+10]#+ logits[:,:,tgt_cls-2] + logits[:,:,tgt_cls-1] + logits[:,:,tgt_cls] + logits[:,:,tgt_cls+1] + logits[:,:,tgt_cls+2]
-                        #print(logit)
-                        gradients = torch.autograd.grad(outputs=logit, inputs=new_data, grad_outputs=torch.ones(logit.size()).to(device), only_inputs=True, retain_graph=True)[0]
-                        signed_grad = torch.sign(gradients)
-                        signed_grad = signed_grad * filter_shape
-                        new_data.requires_grad = False
-                        #new_data = new_data.detach()
-                        new_data = new_data + (epsilon * signed_grad)
-                        new_data = torch.clip(new_data, 0, 255)
-
-                    pred, scores = self.inference_sample(model, new_data, False, threshold)
-                    #print(np.argsort(scores))
-                    #print(pred, scores)
+                    triggered_data, misclass_label = self.generate_trigger(max_iter, new_data, model, src_cls, tgt_cls, filter_shape, epsilon, threshold, clean_model)
+                    if triggered_data == None:
+                        continue        
+                    
+                    #print(src_cls, misclass_label)
                     #print(1/0)
-                    trigger = new_data * filter_shape
+                    trigger = triggered_data * filter_shape
 
                     if visualize:
                         image = trigger[0]
@@ -247,7 +256,7 @@ class Detector(AbstractDetector):
                     #test_img = test_img + trigger
                     #print(new_data.shape, trigger.shape, test_img.shape)
 
-                    test_insertion_loc = 0
+                    test_insertion_loc = 30
                     test_img[:,:,test_insertion_loc:test_insertion_loc+trigger_size,test_insertion_loc:test_insertion_loc+trigger_size] = trigger[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size]
 
                     if visualize:
@@ -266,8 +275,20 @@ class Detector(AbstractDetector):
                     # # wrap the network outputs into a list of annotations
                     # pred = utils.models.wrap_network_prediction(boxes, labels)
                     pred, scores = self.inference_sample(model, test_img, False, threshold)
+                    if len(pred) == 0:
+                        continue
+                    #print(pred, scores)
+                    prediction = pred[-1]['label'] - 1
+                    if prediction != misclass_label:
+                        continue
+                    if scores[-1] < 0.85:
+                        continue
+                                                
+                    print(src_cls, prediction, scores[-1])
+                    found = True
                     #print(pred, scores)
                     #continue#print(1/0)
+                    
                     try:
                         confidences.append(scores[-1])
                         pred_labels.append(pred[-1]['label'])
@@ -286,12 +307,14 @@ class Detector(AbstractDetector):
                     # if first_trigger: break
                     # if len(triggers) > 20:
                     #     break
+                    #print(1/0)
 
                 #mmc_tgt, mmc_label_tgt = get_mmc(pred_labels)
                 #max_mmc_conf_tgt, mean_mmc_conf_tgt = get_mmc_score(confidences, mmc_label_tgt)
                 #features.append([mmc_tgt, max_mmc_conf_tgt, mean_mmc_conf_tgt])
                 all_labels.append(pred_labels)
                 all_confs.append(confidences)
+            return found
 
             all_labels = np.array(all_labels)
             all_confs = np.array(all_confs)
@@ -332,8 +355,46 @@ class Detector(AbstractDetector):
 
             return [max_mmc, max_max_mmc_conf, max_mean_mmc_conf, conf_max_mmc, conf_max_max_mmc_conf, conf_max_mean_mmc_conf, mmc, max_mmc_conf, mean_mmc_conf, consistency]
 
+    def generate_trigger(self, max_iter, new_data, model, src_cls, tgt_cls, filter_shape, epsilon, threshold, clean_model):
 
-    def generate_images(self, models_dirpath, model_dir, model, device):
+        for iter_i in range(max_iter):
+            new_data.requires_grad = True
+            logits = self.get_logits(model, [new_data])
+            #print(logits.shape)
+            tgt_indices = list(range(tgt_cls,min(tgt_cls+10, logits.shape[2])))
+            if src_cls in tgt_indices: tgt_indices.remove(src_cls)
+            #tgt_indices = [10]
+            logit = logits[:,:,tgt_indices]#+ logits[:,:,tgt_cls-2] + logits[:,:,tgt_cls-1] + logits[:,:,tgt_cls] + logits[:,:,tgt_cls+1] + logits[:,:,tgt_cls+2]
+            #print(logit)
+            gradients = torch.autograd.grad(outputs=logit, inputs=new_data, grad_outputs=torch.ones(logit.size()).to(self.device), only_inputs=True, retain_graph=True)[0]
+            signed_grad = torch.sign(gradients)
+            signed_grad = signed_grad * filter_shape
+            new_data.requires_grad = False
+            #new_data = new_data.detach()
+            new_data = new_data + (epsilon * signed_grad)
+            new_data = torch.clip(new_data, 0, 255) #CLip to (0,1)
+            #pred, scores = self.inference_sample(model, new_data, False, threshold)
+            #print(pred[-1]['label'])
+
+        pred, scores = self.inference_sample(model, new_data, False, threshold)
+        #print(pred, scores, src_cls, tgt_cls)
+        if len(pred) == 0:
+            return None, None
+
+        prediction = pred[-1]['label'] - 1
+        if prediction == src_cls:
+            return None, None
+
+        if prediction not in range(tgt_cls, tgt_cls+10):
+            return None, None
+        #print(2, pred, scores)
+        pred_clean, scores_clean = self.inference_sample(clean_model, new_data, False, threshold)
+        if len(pred_clean) != 0 and pred_clean[-1]['label'] == prediction:
+            return None, None
+        #print(3, pred, scores)
+        return new_data, prediction
+
+    def generate_images(self, models_dirpath, model_dir, model):
         images = dict()
 
         with open(os.path.join(models_dirpath, model_dir, "fg_class_translation.json")) as f:
@@ -350,6 +411,8 @@ class Detector(AbstractDetector):
 
         for background_fpath in os.listdir(Background_dirpath):
             for trigger in os.listdir(trigger_dirpath):
+                image_class = int(reverse_mapping[trigger])
+                #if image_class < 40: continue
                 background = skimage.io.imread(os.path.join(Background_dirpath, background_fpath))
                 background = skimage.transform.resize(background, (256, 256, background.shape[2]), anti_aliasing=False)
                 trigger_filepath = os.path.join(trigger_dirpath, trigger)
@@ -371,17 +434,16 @@ class Detector(AbstractDetector):
                 image = image.permute((2, 0, 1))
                 # convert to float (which normalizes the values)
                 image = augmentation_transforms(image)
-                image = image.to(device)
+                image = image.to(self.device)
                 # Convert to NCHW
                 img = image.unsqueeze(0)
-                image_class = int(reverse_mapping[trigger])
                 
                 #print(image_class)
                 # inference
                 #outputs = model(img)
                 #print(outputs.logits.shape)
                 # pred = utils.models.wrap_network_prediction(boxes, labels)
-                pred, scores = self.inference_sample(model, img, False, .10)
+                #pred, scores = self.inference_sample(model, img, False, .10)
                 #print(pred, scores)
                 #if pred[-1]['label'] != int(image_class) + 1:
                 #    print("Pred: ", [x['label'] for x in pred][-1], "Gt: ", image_class+1)#, background_fpath)
@@ -573,7 +635,7 @@ class Detector(AbstractDetector):
                 logging.info("Model predicted {} boxes, Ground Truth has {} boxes.".format(len(pred), len(ground_truth)))
 
     def inference_sample(self, model, sample, from_file=True, threshold=0.10):
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         augmentation_transforms = torchvision.transforms.Compose([torchvision.transforms.ConvertImageDtype(torch.float)])
 
         if from_file:
@@ -581,11 +643,10 @@ class Detector(AbstractDetector):
             sample = torch.as_tensor(sample)
             sample = sample.permute((2, 0, 1))
             sample = augmentation_transforms(sample)
-            sample = sample.to(device)
             sample = sample.unsqueeze(0)
 
         # inference
-        outputs = model(sample)
+        outputs = model(sample.to(self.device))
         # handle multiple output formats for different model types
         if 'DetrObjectDetectionOutput' in outputs.__class__.__name__:
             # DETR doesn't need to unpack the batch dimension
@@ -649,8 +710,8 @@ class Detector(AbstractDetector):
             examples_dirpath:
             round_training_dataset_dirpath:
         """
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model = torch.load(model_filepath, map_location=torch.device(device))
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = torch.load(model_filepath, map_location=torch.device(self.device))
         model.eval()
 
         augmentation_transforms = torchvision.transforms.Compose([torchvision.transforms.ConvertImageDtype(torch.float)])
@@ -658,16 +719,23 @@ class Detector(AbstractDetector):
         dir_components = model_filepath.split("/")
         models_dirpath = "/".join(dir_components[:-2])
         model_dir = dir_components[-2]
-        images = self.generate_images(models_dirpath, model_dir, model, device)
+        images = self.generate_images(models_dirpath, model_dir, model)
+        clean_model = self.get_clean_model(clean_models_dirpath, models_dirpath, model_dir)
+
         if images == None:
             probability = 0.5
         else:
-            feature_vector = self.get_features(images, model, device)
+            feature_vector = self.get_features(images, model, clean_model)
             feature_vector = np.array([feature_vector])
 
-            with open(os.path.join(self.learned_parameters_dirpath, "clf.joblib"), "rb") as fp:
-                clf = pickle.load(fp)
-            probability = np.clip(clf.predict_proba(feature_vector)[0][1], 0.05, 0.95)
+            # with open(os.path.join(self.learned_parameters_dirpath, "clf.joblib"), "rb") as fp:
+            #     clf = pickle.load(fp)
+            # probability = np.clip(clf.predict_proba(feature_vector)[0][1], 0.05, 0.95)
+
+            if feature_vector == True:
+                probability = 0.8
+            else:
+                probability = 0.4
 
         # write the trojan probability to the output file
         with open(result_filepath, "w") as fp:
