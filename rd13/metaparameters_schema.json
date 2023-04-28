@@ -3,7 +3,7 @@
   "title": "Trojan Detection Container (Perspecta)",
   "technique": "Random forest classifier",
   "technique_description": "Attempts trigger reconstruction via the gradient, and applies the product to a portion of synthetic images. If this is possible we consider the model poisoned.",
-  "technique_changes": "For the RCNN and SSD architectures we check if there are misclassifications to target classes with no trigger necessary",
+  "technique_changes": "Bug fix for handling architecture determination",
   "technique_type": ["Trigger Inversion"],
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd13",

@@ -95,7 +95,7 @@ class Detector(AbstractDetector):
 
         features = []
         labels = []
-        load_data = True
+        load_data = False
 
         if load_data:
             data = np.loadtxt("rd13.csv", delimiter=",")
@@ -106,10 +106,12 @@ class Detector(AbstractDetector):
         for i, model_dir in enumerate(sorted(os.listdir(models_dirpath))[:]):
             #print(model_dir)
 
-            if i >= 0: continue
+            #if i >= 0: continue
 
             model = torch.load(os.path.join(models_dirpath, model_dir, "model.pt"), map_location=torch.device(self.device))
             model.eval()
+            print(len(list(model.named_parameters())))
+            continue
 
             with open(os.path.join(models_dirpath, model_dir, "config.json")) as f:
                 config = json.load(f)
@@ -377,7 +379,7 @@ class Detector(AbstractDetector):
             #print(torch.max(new_data))
             #print(pred, scores)
             if len(pred) > 1:
-                print(pred, scores,src_cls)
+                #print(pred, scores,src_cls)
                 return [True]
         return [False]
 
@@ -767,7 +769,7 @@ class Detector(AbstractDetector):
 
             arch = config["py/state"]["model_architecture"]
 
-            if arch == "object_detection:detr":
+            if len(list(model.named_parameters())) == 326:
                 feature_vector = self.get_features_detr(images, model)
             else:
                 feature_vector = self.get_features_other(images, model)
