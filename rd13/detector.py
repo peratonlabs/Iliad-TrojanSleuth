@@ -112,7 +112,7 @@ class Detector(AbstractDetector):
         for i, model_dir in enumerate(sorted(os.listdir(models_dirpath))[:]):
             #print(model_dir)
 
-            if i != 1: continue
+            if i != 45: continue
 
             print(os.path.join(models_dirpath, model_dir))
             if self.device == "cpu":
@@ -130,23 +130,262 @@ class Detector(AbstractDetector):
 
             augmentation_transforms = torchvision.transforms.Compose([torchvision.transforms.ConvertImageDtype(torch.float)])
 
-            images = self.gather_images(os.path.join(models_dirpath, model_dir, "clean-example-data"))
+            # img = skimage.io.imread(os.path.join(models_dirpath, model_dir, "poisoned-example-data/12.png"))
+            # image = torch.as_tensor(img)
+            # # move channels first
+            # image = image.permute((2, 0, 1))
+            # # convert to float (which normalizes the values)
+            # image = augmentation_transforms(image)
+            # image = image.to(self.device)
+            # # Convert to NCHW
+            # img = image.unsqueeze(0)
+            # # wrap the network outputs into a list of annotations
+            # pred, scores = self.inference_sample(model, img, False, .10)
+            # print(pred, scores)
+            # print(1/0)
+
+            train_images, val_images, test_images = self.generate_images(models_dirpath, model_dir, model)
+            #if train_images == None:
+            #    continue
+            # images = self.gather_images(os.path.join(models_dirpath, model_dir, "clean-example-data"))
+            # images = dict()
+
+            # with open(os.path.join(models_dirpath, model_dir, "fg_class_translation.json")) as f:
+            #     mapping = json.load(f)
+            # #print(mapping)
+            # #print(1/0)
+            # reverse_mapping = {value:key for key, value in mapping.items()}
+
+            # try:
+            #     trigger_dirpath = os.path.join(models_dirpath, model_dir, "foregrounds")
+            # except:
+            #     return None
+            # augmentation_transforms = torchvision.transforms.Compose([torchvision.transforms.ConvertImageDtype(torch.float)])
+
+            # for trigger in os.listdir(trigger_dirpath):
+            #     image_class = int(reverse_mapping[trigger])
+            #     trigger_filepath = os.path.join(trigger_dirpath, trigger)
+            #     sign = skimage.io.imread(trigger_filepath)[:,:,:3]
+            #     sign_size = 256
+            #     image = skimage.transform.resize(sign, (sign_size, sign_size, sign.shape[2]), anti_aliasing=False)
+            #     image = torch.as_tensor(image)
+            #     image = image.permute((2, 0, 1))
+            #     image = augmentation_transforms(image)
+            #     image = image.to(self.device)
+            #     img = image.unsqueeze(0)
+            #     if image_class in images:
+            #         images[image_class].append(img)
+            #     else:
+            #         images[image_class] = [img]
+
 
             label = np.loadtxt(os.path.join(models_dirpath, model_dir, 'ground_truth.csv'), dtype=bool)
             labels.append(label)
-
+            #print(1/0)
+            #feature_vector = self.get_features_injection(train_images, model)
+            #feature_vector = self.get_features_evasion(train_images, val_images, test_images, model)
+            #print(feature_vector)
+            #print(1/0)
             #feature_vector = self.get_features_sign(models_dirpath, model_dir, model)
-            feature_vector = self.get_features_misclass(images, model)
-
+            #feature_vector = self.get_features_misclass(images, model)
+            if arch == "object_detection:detr":
+                feature_vector = self.get_features_detr(train_images, val_images, test_images, model)
+            else:
+                feature_vector = self.get_features_other(train_images, model)
             features.append(feature_vector)
             print(features)
-            #print(1/0)
+            print(1/0)
             data = np.concatenate((np.array(features), np.expand_dims(np.array(labels),-1)), axis=1)
             #print(data)
-            #np.savetxt("rd13.csv", data, delimiter=",")
+            np.savetxt("rd13.csv", data, delimiter=",")
 
         self.save_results(data)
 
+    def get_features_sign(self, models_dirpath, model_dir, model):
+
+        images = dict()
+
+        with open(os.path.join(models_dirpath, model_dir, "fg_class_translation.json")) as f:
+            mapping = json.load(f)
+        #print(mapping)
+        #print(1/0)
+        reverse_mapping = {value:key for key, value in mapping.items()}
+
+        try:
+            trigger_dirpath = os.path.join(models_dirpath, model_dir, "foregrounds")
+        except:
+            return None
+        augmentation_transforms = torchvision.transforms.Compose([torchvision.transforms.ConvertImageDtype(torch.float)])
+
+        for trigger in os.listdir(trigger_dirpath):
+            image_class = int(reverse_mapping[trigger])
+            trigger_filepath = os.path.join(trigger_dirpath, trigger)
+            sign = skimage.io.imread(trigger_filepath)[:,:,:3]
+            sign_size = 256
+            image = skimage.transform.resize(sign, (sign_size, sign_size, sign.shape[2]), anti_aliasing=False)
+            image = torch.as_tensor(image)
+            image = image.permute((2, 0, 1))
+            image = augmentation_transforms(image)
+            image = image.to(self.device)
+            img = image.unsqueeze(0)
+            if image_class in images:
+                images[image_class].append(img)
+            else:
+                images[image_class] = [img]
+
+        train_len = 1
+        val_len = 1
+        epsilon = 0.05
+        max_iter = 50
+        misclass_scores = dict()
+        misclass_increases = []
+        triggers = []
+        tgts = []
+        #trigger_fns = []
+        src_classes = []
+        found = False
+        trigger_locs = [100]
+
+        all_labels = []
+        all_confs = []
+
+        for trigger_loc_i in range(len(trigger_locs)):
+
+            for src_cls in images:
+                #if src_cls < 60: continue#9: continue
+                if src_cls != 9: continue
+                #if int(image_class_dirpath) %3 != 1: continue
+                #print(src_cls)
+                #if isinstance(images[src_cls][0], int):
+                #    continue
+                fns = images[src_cls]
+                #fns.sort()
+                train_images = []
+                val_images = []
+                # for fn_i, fn in enumerate(images[src_cls]):
+
+                #     if fn_i < train_len:
+                #         train_images.append(fn)
+
+                #     if fn_i >= train_len and fn_i < train_len+val_len:
+                #         val_images.append(fn)
+
+                first_trigger = True
+                visualize = False
+                threshold = .50
+                train_images_send = copy.deepcopy(train_images)
+                val_images_send = copy.deepcopy(val_images)
+
+                confidences = []
+                pred_labels = []
+
+                for tgt_cls in images:#logits.shape[2]-65):
+                    if tgt_cls != 20: continue#23: continue
+                    #if tgt_cls%10 != 0: continue
+                    #if tgt_cls == src_cls: continue
+                    #print(src_cls, tgt_cls)
+                    
+                    if visualize:
+                        image = fns[0][0]
+                        image = image.permute((1, 2, 0))*255
+                        image = image.cpu().numpy()
+                        image = Image.fromarray(image.astype('uint8'), 'RGB')
+                        #image.show()
+                        image.save('start_img.png')
+                    #print(1/0)
+                    new_data = fns[0]
+
+                    trigger_insertion_loc = trigger_locs[trigger_loc_i]
+                    trigger_size = 70
+                    filter_shape = torch.zeros(new_data.shape).to(self.device)
+                    filter_shape[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size] = 1
+                    #print(new_data.shape, filter_shape.shape)
+                    pred, scores = self.inference_sample(model, new_data, False, threshold)
+                    print(pred, scores)
+                    #print(torch.max(new_data))
+                    #print(pred)
+
+                    triggered_data, misclass_label = self.generate_trigger(max_iter, new_data, model, src_cls, tgt_cls, filter_shape, epsilon, threshold)
+                    if triggered_data == None:
+                        continue        
+                    
+                    #print(src_cls, misclass_label)
+                    #print(1/0)
+                    trigger = triggered_data * filter_shape
+
+                    if visualize:
+                        image = trigger[0]
+                        image = image.permute((1, 2, 0))*255
+                        image = image.cpu().numpy()
+                        image = Image.fromarray(image.astype('uint8'), 'RGB')
+                        #image.show()
+                        image.save('triggered_img.png')
+
+                    test_img = fns[2]
+
+                    #test_img = test_img * (1-filter_shape)
+                    #test_img = test_img + trigger
+                    #print(new_data.shape, trigger.shape, test_img.shape)
+
+                    test_insertion_loc = trigger_insertion_loc + 30
+                    test_img[:,:,test_insertion_loc:test_insertion_loc+trigger_size,test_insertion_loc:test_insertion_loc+trigger_size] = trigger[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size]
+
+                    if visualize:
+                        image = test_img[0]
+                        image = image.permute((1, 2, 0))*255
+                        image = image.cpu().numpy()
+                        image = Image.fromarray(image.astype('uint8'), 'RGB')
+                        #image.show()
+                        image.save('test_img.png')
+                    
+                    # outputs = model(test_img)
+                    # outputs = outputs[0]  # unpack the batch size of 1
+                    # boxes = outputs['boxes'].cpu().detach().numpy()
+                    # scores = outputs['scores'].cpu().detach().numpy()
+                    # labels = outputs['labels'].cpu().detach().numpy()
+                    # # wrap the network outputs into a list of annotations
+                    # pred = utils.models.wrap_network_prediction(boxes, labels)
+                    pred, scores = self.inference_sample(model, test_img, False, threshold)
+                    if len(pred) == 0:
+                        continue
+                    #print(pred, scores)
+                    prediction = pred[-1]['label'] - 1
+                    if prediction != misclass_label:
+                        continue
+                    if scores[-1] < 0.85:
+                        continue
+                                                
+                    #print(src_cls, prediction, scores[-1])
+                    return [True]
+                    #print(pred, scores)
+                    #continue#print(1/0)
+                    
+                    try:
+                        confidences.append(scores[-1])
+                        pred_labels.append(pred[-1]['label'])
+                    except:
+                        confidences.append(0)
+                        pred_labels.append(-1)
+                        #print("Failed", src_cls, tgt_cls)
+
+                    # #f list(labels2).count(j) <= object_count:
+                    # #    continue
+                    # #trigger = trigger[:,:50,:50]
+                    # triggers.append(trigger.detach())
+                    # tgts.append(tgt_cls)
+                    # src_classes.append(src_cls)
+
+                    # if first_trigger: break
+                    # if len(triggers) > 20:
+                    #     break
+                    #print(1/0)
+
+                #mmc_tgt, mmc_label_tgt = get_mmc(pred_labels)
+                #max_mmc_conf_tgt, mean_mmc_conf_tgt = get_mmc_score(confidences, mmc_label_tgt)
+                #features.append([mmc_tgt, max_mmc_conf_tgt, mean_mmc_conf_tgt])
+                all_labels.append(pred_labels)
+                all_confs.append(confidences)
+        return [False]
 
     
     def get_features_misclass(self, data, model):
@@ -166,10 +405,15 @@ class Detector(AbstractDetector):
         all_labels = []
         all_confs = []
 
-        color_params = [0,64,128,200]
+        color_params = [0,64,128,200]#[0,64,128,200]
 
         for src_cls in data:
-
+            #if src_cls < 60: continue#9: continue
+            #if src_cls != 61: continue
+            #if int(image_class_dirpath) %3 != 1: continue
+            #print(src_cls)
+            #if isinstance(images[src_cls][0], int):
+            #    continue
             images = data[src_cls][0]
             #print("Image length", len(images))
             boxes = data[src_cls][1]
@@ -214,7 +458,11 @@ class Detector(AbstractDetector):
             confidences = []
             pred_labels = []
 
-
+            #for tgt_cls in data:#logits.shape[2]-65):
+            #if tgt_cls != 44: continue#23: continue
+            #if tgt_cls%5 != 0: continue
+            #if tgt_cls == src_cls: continue
+            #print(src_cls, tgt_cls)
             train_images_send = copy.deepcopy(train_images)
             val_images_send = copy.deepcopy(val_images)
             test_images_send = copy.deepcopy(test_images)
@@ -228,6 +476,14 @@ class Detector(AbstractDetector):
                 for img_i in range(len(train_fns)):
                     #if img_i<=3: continue
                 
+                    # if visualize:
+                    #     image = train_images[0][0]
+                    #     image = image.permute((1, 2, 0))*255
+                    #     image = image.cpu().numpy()
+                    #     image = Image.fromarray(image.astype('uint8'), 'RGB')
+                    #     #image.show()
+                    #     image.save('start_img.png')
+                    #print(1/0)
                     selected_img = train_images[img_i]
                     selected_box = train_boxes[img_i]
                     #print(selected_box)
@@ -237,11 +493,26 @@ class Detector(AbstractDetector):
                     if trigger_loc==1:
                         trigger_insertion_x1 = 20
                         trigger_insertion_y1 = 20
-
+                    #int(selected_box['x2'] - trigger_insertion_x1)
+                    #print(trigger_size)
+                    # filter_shape = torch.zeros(selected_img.shape).to(self.device)
+                    # filter_shape[:,:,trigger_insertion_y1:trigger_insertion_y1+trigger_size,trigger_insertion_x1:trigger_insertion_x1+trigger_size] = 1
+                    # #print(new_data.shape, filter_shape.shape)
                     og_pred, og_scores = self.inference_sample(model, selected_img, False, threshold)
-
+                    #print(og_pred, og_scores)
+                    #print(torch.max(new_data))
+                    #print(pred)
+                    #selected_img[:,:,trigger_insertion_y1:trigger_insertion_y1+trigger_size,trigger_insertion_x1:trigger_insertion_x1+trigger_size] = 0.5
+                    
                     parameters = torch.tensor([4,0,0,0,trigger_size/2/256.0,trigger_insertion_x1+(trigger_size/2),trigger_insertion_y1+(trigger_size/2)])
 
+                    # wand_img = self.draw_polygon(train_fns[0], parameters)
+                    # image = np.array(wand_img)[:,:,:-1]
+                    # selected_img = torch.as_tensor(image)/255
+                    # selected_img = selected_img.permute((2, 0, 1))
+                    # selected_img = selected_img.unsqueeze(0)
+                    # pred, scores = self.inference_sample(model, selected_img, False, threshold)
+                    # print(pred, scores)
                     #continue
                     for color_i in range(len(color_params)):
                         color = color_params[color_i]
@@ -258,6 +529,13 @@ class Detector(AbstractDetector):
                                 wand_img = self.draw_polygon(train_fns[img_i], parameters)
                                 image = np.array(wand_img)[:,:,:-1]
                                 #print(image.shape)
+                                #image = np.transpose(img, (2, 0, 1))
+                                #print(image.shape)
+                                #print(np.max(image))#*255
+                                # if visualize:
+                                #     img = Image.fromarray(image.astype('uint8'), 'RGB')
+                                #     #img.show()
+                                #     img.save('start_img.png')
 
                                 selected_img = torch.as_tensor(image)/255
                                 selected_img = selected_img.permute((2, 0, 1))
@@ -280,7 +558,9 @@ class Detector(AbstractDetector):
                                             mapping[pred_i] = pred_i2
                                 #print(mapping)
                                 for key in mapping:
-
+                                    #print(og_pred[mapping[key]]['label'], pred[key]['label'])
+                                    #if og_pred[key]['label'] == src_cls+offset and pred[mapping[key]]['label'] == tgt_cls+offset:
+                                    #if len(og_pred) > 0 and len(pred) > 0:
                                     if (copy.deepcopy(parameters[1:4]), trigger_loc, pred[key]['label']) in trigger_set:
                                         continue
                                     if og_pred[mapping[key]]['label'] != pred[key]['label']:#og_pred[mapping[key]]['label'] == src_cls+offset and
@@ -292,6 +572,29 @@ class Detector(AbstractDetector):
                                         types.append("Misclass")
                                         trigger_set.add((copy.deepcopy(parameters[1:4]), trigger_loc, pred[key]['label']))
 
+                                # for pred_i in range(len(pred)):
+                                #     if (copy.deepcopy(parameters[1:4]), trigger_loc, pred[pred_i]['label']) in trigger_set:
+                                #         continue
+                                #     if pred_i not in mapping:# and pred[pred_i]['label'] != src_cls+offset:
+                                #         triggers.append(copy.deepcopy(parameters[1:4]))
+                                #         tgt_classes.append(pred[pred_i]['label'])
+                                #         trigger_locs.append(trigger_loc)
+                                #         types.append("Injection/Localization")
+                                #         trigger_set.add((copy.deepcopy(parameters[1:4]), trigger_loc, pred[pred_i]['label']))
+                                #print(1/0)
+
+                                # if len(og_pred) > len(pred):
+                                #     if (copy.deepcopy(parameters[1:4]), trigger_loc, -1) in trigger_set:
+                                #         continue
+                                #     triggers.append(copy.deepcopy(parameters[1:4]))
+                                #     tgt_classes.append(-1)
+                                #     trigger_locs.append(trigger_loc)
+                                #     types.append("Evasion")
+                                #     trigger_set.add((copy.deepcopy(parameters[1:4]), trigger_loc, -1))
+            #print(tgt_classes)
+            #print(trigger_set)
+            #print(types)
+            #print(1/0)
             sucess_list = []
             for i in range(len(triggers)):
                 trigger_parameters = triggers[i]
@@ -348,7 +651,10 @@ class Detector(AbstractDetector):
                                 mapping[pred_i] = pred_i2
                     #print(mapping)
                     for key in mapping:
-
+                        #print(pred[key]['label'])
+                        #print(og_pred[mapping[key]]['label'], pred[key]['label'])
+                        #if og_pred[key]['label'] == src_cls+offset and pred[mapping[key]]['label'] == tgt_cls+offset:
+                        #if len(og_pred) > 0 and len(pred) > 0:
                         if og_pred[mapping[key]]['label'] != pred[key]['label'] and pred[key]['label'] == tgt_cls:
                             success1 = True
                     for pred_i in range(len(pred)):
@@ -358,26 +664,717 @@ class Detector(AbstractDetector):
                     if triger_type == "Evasion" and len(og_pred) > len(pred):
                         success1 = True
 
+                    # parameters = torch.tensor([8,trigger_parameters[0],trigger_parameters[1],trigger_parameters[2],trigger_size/2/256.0,trigger_insertion_x1-(trigger_size/2),trigger_insertion_y1+(trigger_size/2)])
+
+                    # wand_img = self.draw_polygon(test_fns[img_i], parameters)
+                    # image = np.array(wand_img)[:,:,:-1]
+
+                    # if visualize:
+                    #     img = Image.fromarray(image.astype('uint8'), 'RGB')
+                    #     #img.show()
+                    #     img.save(f'test_{img_i}_2_img.png')
+
+                    # selected_img = torch.as_tensor(image)/255
+                    # selected_img = selected_img.permute((2, 0, 1))
+                    # #selected_img = augmentation_transforms(selected_img)
+                    # selected_img = selected_img.unsqueeze(0)
+
+                    # #print(new_data.shape, filter_shape.shape)
+                    # pred, scores = self.inference_sample(model, selected_img, False, threshold)
+                    # #print(pred, scores)
+                    # mapping = dict()
+                    # for pred_i in range(len(pred)):
+                    #     min_distance=1000000
+                    #     for pred_i2 in range(len(og_pred)):
+                    #         distance = self.dist(pred[pred_i]["bbox"], og_pred[pred_i2]["bbox"])
+                    #         #print(distance, pred[pred_i]["bbox"], og_pred[pred_i2]["bbox"])
+                    #         if distance < dist_threshold and distance < min_distance:
+                    #             min_distance = distance
+                    #             mapping[pred_i] = pred_i2
+                    # #print(mapping)
+                    # for key in mapping:
+                    #     #print(pred[key]['label'])
+                    #     #print(og_pred[mapping[key]]['label'], pred[key]['label'])
+                    #     #if og_pred[key]['label'] == src_cls+offset and pred[mapping[key]]['label'] == tgt_cls+offset:
+                    #     #if len(og_pred) > 0 and len(pred) > 0:
+                    #     if og_pred[mapping[key]]['label'] != pred[key]['label'] and pred[key]['label'] == tgt_cls:
+                    #         success2 = True
+                    # for pred_i in range(len(pred)):
+                    #     #print(pred[pred_i]['label'])
+                    #     if triger_type == "Injection/Localization" and pred_i not in mapping and pred[pred_i]['label'] == tgt_cls:
+                    #         success2 = True
+                    # if triger_type == "Evasion" and len(og_pred) > len(pred):
+                    #     success2 = True
+
+                    # parameters = torch.tensor([8,trigger_parameters[0],trigger_parameters[1],trigger_parameters[2],trigger_size/2/256.0,trigger_insertion_x1+(trigger_size/2),trigger_insertion_y1-(trigger_size/2)])
+
+                    # wand_img = self.draw_polygon(test_fns[img_i], parameters)
+                    # image = np.array(wand_img)[:,:,:-1]
+
+                    # if visualize:
+                    #     img = Image.fromarray(image.astype('uint8'), 'RGB')
+                    #     #img.show()
+                    #     img.save(f'test_{img_i}_3_img.png')
+
+                    # selected_img = torch.as_tensor(image)/255
+                    # selected_img = selected_img.permute((2, 0, 1))
+                    # #selected_img = augmentation_transforms(selected_img)
+                    # selected_img = selected_img.unsqueeze(0)
+
+                    # #print(new_data.shape, filter_shape.shape)
+                    # pred, scores = self.inference_sample(model, selected_img, False, threshold)
+                    # #print(pred, scores)
+                    # mapping = dict()
+                    # for pred_i in range(len(pred)):
+                    #     min_distance=1000000
+                    #     for pred_i2 in range(len(og_pred)):
+                    #         distance = self.dist(pred[pred_i]["bbox"], og_pred[pred_i2]["bbox"])
+                    #         #print(distance, pred[pred_i]["bbox"], og_pred[pred_i2]["bbox"])
+                    #         if distance < dist_threshold and distance < min_distance:
+                    #             min_distance = distance
+                    #             mapping[pred_i] = pred_i2
+                    # #print(mapping)
+                    # for key in mapping:
+                    #     #print(pred[key]['label'])
+                    #     #print(og_pred[mapping[key]]['label'], pred[key]['label'])
+                    #     #if og_pred[key]['label'] == src_cls+offset and pred[mapping[key]]['label'] == tgt_cls+offset:
+                    #     #if len(og_pred) > 0 and len(pred) > 0:
+                    #     if og_pred[mapping[key]]['label'] != pred[key]['label'] and pred[key]['label'] == tgt_cls:
+                    #         success3 = True
+                    # for pred_i in range(len(pred)):
+                    #     #print(pred[pred_i]['label'])
+                    #     if triger_type == "Injection/Localization" and pred_i not in mapping and pred[pred_i]['label'] == tgt_cls:
+                    #         success3 = True
+                    # if triger_type == "Evasion" and len(og_pred) > len(pred):
+                    #     success3 = True
                     #print(img_i, success1)
                     if success1 and success2 and success3:#if (success1 and success2) or (success1 and success3) or (success2 and success3):
                         successes += 1
                     #if successes==3: visualize = False
                 sucess_list.append(successes)
                 #print(tgt_cls, successes)
-            #print(sucess_list)
+            print(sucess_list)
             if len(sucess_list)>0:
-                #print(max(sucess_list))
-                #print(tgt_classes[np.argmax(sucess_list)])
-                #print(trigger_locs[np.argmax(sucess_list)])
-                #print(triggers[np.argmax(sucess_list)])
-                #print(types[np.argmax(sucess_list)])
+                print(max(sucess_list))
+                print(tgt_classes[np.argmax(sucess_list)])
+                print(trigger_locs[np.argmax(sucess_list)])
+                print(triggers[np.argmax(sucess_list)])
+                print(types[np.argmax(sucess_list)])
                 if max(sucess_list) >= 2:
                     return [True]
-            #continue
+            continue
             #print(1/0)
             
         return [False]
 
+
+    def get_features_detr(self, train_images, val_images, test_images, model):
+
+            train_len = 1
+            val_len = 1
+            epsilon = 0.2
+            max_iter = 10
+            misclass_scores = dict()
+            misclass_increases = []
+            triggers = []
+            tgts = []
+            #trigger_fns = []
+            src_classes = []
+            found = False
+            trigger_locs = [0,100]
+
+            all_labels = []
+            all_confs = []
+            #print(train_images.keys(), test_images.keys())
+            for trigger_loc_i in range(len(trigger_locs)):
+
+                for src_cls in train_images:
+                    #if src_cls < 60: continue#9: continue
+                    if src_cls != 16: continue
+                    #if int(image_class_dirpath) %3 != 1: continue
+                    #print(src_cls)
+                    #if isinstance(images[src_cls][0], int):
+                    #    continue
+                    fns = train_images[src_cls] + val_images[src_cls]
+                    #print(len(fns))
+                    #fns.sort()
+                    #train_images = []
+                    #val_images = []
+                    # for fn_i, fn in enumerate(images[src_cls]):
+
+                    #     if fn_i < train_len:
+                    #         train_images.append(fn)
+
+                    #     if fn_i >= train_len and fn_i < train_len+val_len:
+                    #         val_images.append(fn)
+
+                    first_trigger = True
+                    visualize = False
+                    threshold = .80
+
+                    confidences = []
+                    pred_labels = []
+
+                    for tgt_cls in train_images:#logits.shape[2]-65):
+                        #if tgt_cls != 40: continue#23: continue
+                        if tgt_cls%10 != 0: continue
+                        #if tgt_cls == src_cls: continue
+                        #print(src_cls, tgt_cls)
+
+                        train_images_send = copy.deepcopy(fns)
+                        #val_images_send = copy.deepcopy(val_images)
+                        
+                        if visualize:
+                            image = fns[0][0]
+                            image = image.permute((1, 2, 0))*255
+                            image = image.cpu().numpy()
+                            image = Image.fromarray(image.astype('uint8'), 'RGB')
+                            #image.show()
+                            image.save('start_img.png')
+                        #print(1/0)
+                        new_data = train_images_send[0]
+
+                        trigger_insertion_loc = trigger_locs[trigger_loc_i]
+                        trigger_size = 20
+                        filter_shape = torch.zeros(new_data.shape).to(self.device)
+                        filter_shape[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size] = 1
+                        #print(new_data.shape, filter_shape.shape)
+                        pred, scores = self.inference_sample(model, new_data, False, threshold)
+                        #print(pred, scores)
+                        #print(torch.max(new_data))
+                        #print(pred)
+
+                        triggered_data, misclass_label = self.generate_trigger(max_iter, new_data, model, src_cls, tgt_cls, filter_shape, epsilon, threshold)
+                        if triggered_data == None:
+                            continue        
+                        
+                        #print(src_cls, misclass_label)
+                        #print(1/0)
+                        trigger = triggered_data * filter_shape
+                        train_images_send = copy.deepcopy(fns)
+
+                        if visualize:
+                            image = trigger[0]
+                            image = image.permute((1, 2, 0))*255
+                            image = image.cpu().numpy()
+                            image = Image.fromarray(image.astype('uint8'), 'RGB')
+                            #image.show()
+                            image.save('triggered_img.png')
+
+                        test_img = train_images_send[1]
+
+                        #test_img = test_img * (1-filter_shape)
+                        #test_img = test_img + trigger
+                        #print(new_data.shape, trigger.shape, test_img.shape)
+
+                        test_insertion_loc = trigger_insertion_loc + 0
+                        test_img[:,:,test_insertion_loc:test_insertion_loc+trigger_size,test_insertion_loc:test_insertion_loc+trigger_size] = trigger[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size]
+
+                        if visualize:
+                            image = test_img[0]
+                            image = image.permute((1, 2, 0))*255
+                            image = image.cpu().numpy()
+                            image = Image.fromarray(image.astype('uint8'), 'RGB')
+                            #image.show()
+                            image.save('test_img.png')
+                        
+                        # outputs = model(test_img)
+                        # outputs = outputs[0]  # unpack the batch size of 1
+                        # boxes = outputs['boxes'].cpu().detach().numpy()
+                        # scores = outputs['scores'].cpu().detach().numpy()
+                        # labels = outputs['labels'].cpu().detach().numpy()
+                        # # wrap the network outputs into a list of annotations
+                        # pred = utils.models.wrap_network_prediction(boxes, labels)
+                        pred, scores = self.inference_sample(model, test_img, False, threshold)
+                        if len(pred) == 0:
+                            continue
+                        #print(pred, scores)
+                        prediction = pred[-1]['label'] - 1
+                        #print(prediction)
+                        if prediction != misclass_label:
+                            continue
+                        if scores[-1] < 0.80:
+                            continue
+                                                    
+                        print(src_cls, prediction, scores[-1])
+                        return [True]
+                        #print(pred, scores)
+                        #continue#print(1/0)
+                        
+                        try:
+                            confidences.append(scores[-1])
+                            pred_labels.append(pred[-1]['label'])
+                        except:
+                            confidences.append(0)
+                            pred_labels.append(-1)
+                            #print("Failed", src_cls, tgt_cls)
+
+                        # #f list(labels2).count(j) <= object_count:
+                        # #    continue
+                        # #trigger = trigger[:,:50,:50]
+                        # triggers.append(trigger.detach())
+                        # tgts.append(tgt_cls)
+                        # src_classes.append(src_cls)
+
+                        # if first_trigger: break
+                        # if len(triggers) > 20:
+                        #     break
+                        #print(1/0)
+
+                    #mmc_tgt, mmc_label_tgt = get_mmc(pred_labels)
+                    #max_mmc_conf_tgt, mean_mmc_conf_tgt = get_mmc_score(confidences, mmc_label_tgt)
+                    #features.append([mmc_tgt, max_mmc_conf_tgt, mean_mmc_conf_tgt])
+                    all_labels.append(pred_labels)
+                    all_confs.append(confidences)
+            return [False]
+
+            all_labels = np.array(all_labels)
+            all_confs = np.array(all_confs)
+            #print(all_confs, all_labels)
+            #print(all_labels.shape, all_confs.shape)
+            mmcs = []
+            max_mmc_confs = []
+            mean_mmc_confs = []
+            tgt_labels = []
+            for i in range(all_labels.shape[0]):
+                mmc_tgt, mmc_label_tgt = self.get_mmc(all_labels[i])
+                max_mmc_conf_tgt, mean_mmc_conf_tgt = self.get_mmc_score(all_labels[i], all_confs[i], mmc_label_tgt)
+                mmcs.append(mmc_tgt)
+                max_mmc_confs.append(max_mmc_conf_tgt)
+                mean_mmc_confs.append(mean_mmc_conf_tgt)
+                tgt_labels.append(mmc_label_tgt)
+            max_index = np.argmax(mmcs)
+            max_index_label = tgt_labels[max_index]
+            max_mmc = mmcs[max_index]
+            max_max_mmc_conf = max_mmc_confs[max_index]
+            max_mean_mmc_conf = mean_mmc_confs[max_index]
+            conf_max_index = np.argmax(max_mmc_confs)
+            conf_max_mmc = mmcs[conf_max_index]
+            conf_max_max_mmc_conf = max_mmc_confs[conf_max_index]
+            conf_max_mean_mmc_conf = mean_mmc_confs[conf_max_index]
+
+            #print("max_index ", max_index, "max_mmc" , max_mmc, "max_max_mmc_conf ", max_max_mmc_conf, "max_mean_mmc_conf ", max_mean_mmc_conf, "conf_max_index ", conf_max_index, "conf_max_mmc ", conf_max_mmc, "conf_max_max_mmc_conf ", conf_max_max_mmc_conf, "conf_max_mean_mmc_conf ", conf_max_mean_mmc_conf)
+
+            flattened_all_labels = all_labels.flatten()
+            flattened_all_confs = all_confs.flatten()
+
+            mmc, mmc_label = self.get_mmc(flattened_all_labels)
+            max_mmc_conf, mean_mmc_conf = self.get_mmc_score(flattened_all_labels, flattened_all_confs, mmc_label)
+
+            consistency = mmc_label == max_index_label
+
+            #print("mmc ", mmc, "max_mmc_conf ", max_mmc_conf, "mean_mmc_conf ", mean_mmc_conf, "consistency ", consistency)
+
+            return [max_mmc, max_max_mmc_conf, max_mean_mmc_conf, conf_max_mmc, conf_max_max_mmc_conf, conf_max_mean_mmc_conf, mmc, max_mmc_conf, mean_mmc_conf, consistency]
+
+    def get_features_other(self, images, model):
+
+        
+        for src_cls in images:
+            #if src_cls < 60: continue#9: continue
+            #if src_cls != 44: continue
+            #if int(image_class_dirpath) %3 != 1: continue
+            #print(src_cls)
+            #if isinstance(images[src_cls][0], int):
+            #    continue
+            fns = images[src_cls]
+            #fns.sort()
+            train_images = []
+            val_images = []
+
+            first_trigger = True
+            visualize = True
+            threshold = .22
+            train_images_send = copy.deepcopy(train_images)
+            val_images_send = copy.deepcopy(val_images)
+
+            confidences = []
+            pred_labels = []
+
+            #print(1/0)
+            new_data = fns[0]
+
+            pred, scores = self.inference_sample(model, new_data, False, threshold)
+            #print(torch.max(new_data))
+            #print(pred, scores)
+            if len(pred) > 1:
+                #print(pred, scores,src_cls)
+                return [True]
+        return [False]
+
+    def get_features_injection(self, images, model):
+
+            epsilon = 0.1
+            max_iter = 15
+            misclass_scores = dict()
+            misclass_increases = []
+            triggers = []
+            tgts = []
+            #trigger_fns = []
+            src_classes = []
+            found = False
+            trigger_locs = [10]
+            offset = 1
+            fns = []
+            successful_targets = []
+            predictions = []
+            augmentation_transforms = torchvision.transforms.Compose([torchvision.transforms.ConvertImageDtype(torch.float)])
+            for background_fpath in os.listdir(Background_dirpath):
+
+                background = skimage.io.imread(os.path.join(Background_dirpath, background_fpath))
+                background = skimage.transform.resize(background, (256, 256, background.shape[2]), anti_aliasing=False)
+                image = background
+                image = torch.as_tensor(image)
+                # move channels first
+                image = image.permute((2, 0, 1))
+                # convert to float (which normalizes the values)
+                image = augmentation_transforms(image)
+                image = image.to(self.device)
+                # Convert to NCHW
+                img = image.unsqueeze(0)
+                fns.append(img)
+
+            for trigger_loc_i in range(len(trigger_locs)):
+
+                    visualize = True
+                    threshold = .75
+
+                    confidences = []
+                    pred_labels = []
+
+                    for tgt_cls in images:#logits.shape[2]-65):
+                        if tgt_cls != 3: continue#23: continue
+                        #tgt_cls = tgt_cls + offset
+                        #if tgt_cls%10 != 0: continue
+                        #if tgt_cls == src_cls: continue
+                        print(tgt_cls)
+                        src_cls = -1#(tgt_cls + 2) % len(images)
+                        
+                        if visualize:
+                            image = fns[0][0]
+                            image = image.permute((1, 2, 0))*255
+                            image = image.cpu().numpy()
+                            image = Image.fromarray(image.astype('uint8'), 'RGB')
+                            #image.show()
+                            image.save('start_img.png')
+                        #print(1/0)
+                        new_data = fns[0]#torch.FloatTensor(np.random.normal(0,1,fns[0].shape)).to(self.device)#fns[0]
+
+                        trigger_insertion_loc = trigger_locs[trigger_loc_i]
+                        trigger_size = 20
+                        filter_shape = torch.zeros(new_data.shape).to(self.device)
+                        filter_shape[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size] = 1
+                        #print(new_data.shape, filter_shape.shape)
+                        pred, scores = self.inference_sample(model, new_data, False, threshold)
+                        #print(pred, scores)
+                        #print(torch.max(new_data))
+                        #print(pred)
+
+
+                        triggered_data, misclass_label = self.generate_trigger(max_iter, new_data, model, src_cls, tgt_cls, filter_shape, epsilon, threshold, offset ,True)
+                        if triggered_data == None:
+                            continue        
+                        
+                        #print(src_cls, misclass_label)
+                        #print(1/0)
+                        trigger = triggered_data * filter_shape
+
+                        if visualize:
+                            image = trigger[0]
+                            image = image.permute((1, 2, 0))*255
+                            image = image.cpu().numpy()
+                            image = Image.fromarray(image.astype('uint8'), 'RGB')
+                            #image.show()
+                            image.save('triggered_img.png')
+
+                        test_img = fns[1]#torch.FloatTensor(np.random.normal(0,1,fns[0].shape)).to(self.device)
+
+                        #test_img = test_img * (1-filter_shape)
+                        #test_img = test_img + trigger
+                        #print(new_data.shape, trigger.shape, test_img.shape)
+
+                        test_insertion_loc = trigger_insertion_loc + 100
+                        test_img[:,:,test_insertion_loc:test_insertion_loc+trigger_size,test_insertion_loc:test_insertion_loc+trigger_size] = trigger[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size]
+
+                        if visualize:
+                            image = test_img[0]
+                            image = image.permute((1, 2, 0))*255
+                            image = image.cpu().numpy()
+                            image = Image.fromarray(image.astype('uint8'), 'RGB')
+                            #image.show()
+                            image.save('test_img.png')
+                        
+                        # outputs = model(test_img)
+                        # outputs = outputs[0]  # unpack the batch size of 1
+                        # boxes = outputs['boxes'].cpu().detach().numpy()
+                        # scores = outputs['scores'].cpu().detach().numpy()
+                        # labels = outputs['labels'].cpu().detach().numpy()
+                        # # wrap the network outputs into a list of annotations
+                        # pred = utils.models.wrap_network_prediction(boxes, labels)
+                        pred, scores = self.inference_sample(model, test_img, False, threshold)
+                        print(pred, scores)
+                        if len(pred) == 0:
+                            continue
+                        prediction = pred[-1]['label'] - offset
+                        predictions.append(prediction)
+                        if prediction != misclass_label:
+                            continue
+                        if scores[-1] < threshold:
+                            continue
+
+                        test_img = fns[2]
+
+                        test_insertion_loc = trigger_insertion_loc + 150
+                        test_img[:,:,test_insertion_loc:test_insertion_loc+trigger_size,test_insertion_loc:test_insertion_loc+trigger_size] = trigger[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size]
+
+                        if visualize:
+                            image = test_img[0]
+                            image = image.permute((1, 2, 0))*255
+                            image = image.cpu().numpy()
+                            image = Image.fromarray(image.astype('uint8'), 'RGB')
+                            #image.show()
+                            image.save('test_img2.png')
+
+                        pred, scores = self.inference_sample(model, test_img, False, threshold)
+                        print(pred, scores)
+                        if len(pred) == 0:
+                            continue
+                        prediction = pred[-1]['label'] - offset
+                        predictions.append(prediction)
+                        if prediction != misclass_label:
+                            continue
+                        if scores[-1] < threshold:
+                            continue
+
+                        successful_targets.append(misclass_label)                       
+                        #print(src_cls, prediction, scores[-1])
+                        #return [True]
+                        #print(pred, scores)
+                        #continue#print(1/0)
+                        
+            print(predictions)
+            print(successful_targets)
+            return [False]
+
+    def get_features_evasion(self, train_images, val_images, test_images, model):
+        epsilon = 0.1
+        max_iter = 35
+        misclass_scores = dict()
+        misclass_increases = []
+        triggers = []
+        tgts = []
+        #trigger_fns = []
+        src_classes = []
+        found = False
+        trigger_locs = [0]
+        offset = 1
+        fns = []
+        successful_targets = []
+        predictions = []
+
+        for trigger_loc_i in range(len(trigger_locs)):
+
+                visualize = False
+                threshold = .75
+
+                confidences = []
+                pred_labels = []
+
+                for tgt_cls in train_images:#logits.shape[2]-65):
+                    fns_train = train_images[tgt_cls]
+                    fns_val = val_images[tgt_cls]
+                    fns_test = test_images[tgt_cls]
+                    if tgt_cls != 12: continue#23: continue
+                    #tgt_cls = tgt_cls + offset
+                    #if tgt_cls%10 != 0: continue
+                    #if tgt_cls == src_cls: continue
+                    print(tgt_cls)
+                    src_cls = tgt_cls#(tgt_cls + 10) % len(images)
+                    
+                    if visualize:
+                        image = fns[0][0]
+                        image = image.permute((1, 2, 0))*255
+                        image = image.cpu().numpy()
+                        image = Image.fromarray(image.astype('uint8'), 'RGB')
+                        #image.show()
+                        image.save('start_img.png')
+                    #print(1/0)
+                    new_data = fns_train[0]#torch.FloatTensor(np.random.normal(0,1,fns[0].shape)).to(self.device)#fns[0]
+
+                    trigger_insertion_loc = trigger_locs[trigger_loc_i]
+                    trigger_size = 22
+                    filter_shape = torch.zeros(new_data.shape).to(self.device)
+                    filter_shape[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size] = 1
+                    # #print(new_data.shape, filter_shape.shape)
+                    # pred, scores = self.inference_sample(model, new_data, False, threshold)
+                    # print(pred, scores)
+                    # #print(torch.max(new_data))
+                    # #print(pred)
+
+
+                    triggered_data1, misclass_label1 = self.generate_trigger(max_iter, new_data, model, src_cls, tgt_cls, filter_shape, epsilon, threshold, offset ,True, -1)
+
+                    if misclass_label1 != -1:
+                        continue
+                    
+                    trigger1 = triggered_data1 * filter_shape
+                    trigger1 = trigger1[:,:,trigger_insertion_loc:trigger_insertion_loc+trigger_size,trigger_insertion_loc:trigger_insertion_loc+trigger_size]
+                    #print(src_cls, misclass_label)
+                    #print(1/0)
+
+                    new_data = fns_val[0]
+                    val_insertion_loc = trigger_insertion_loc + 100
+                    filter_shape = torch.zeros(new_data.shape).to(self.device)
+                    filter_shape[:,:,val_insertion_loc:val_insertion_loc+trigger_size,val_insertion_loc:val_insertion_loc+trigger_size] = 1
+
+                    triggered_data2, misclass_label2 = self.generate_trigger(max_iter, new_data, model, src_cls, tgt_cls, filter_shape, epsilon, threshold, offset ,True, -1)
+
+                    if misclass_label2 != -1:
+                        continue
+
+                    trigger2 = triggered_data2 * filter_shape
+                    trigger2 = trigger2[:,:,val_insertion_loc:val_insertion_loc+trigger_size,val_insertion_loc:val_insertion_loc+trigger_size]
+                    trigger = (trigger1 + trigger2) / 2
+
+                    #print(src_cls, misclass_label)
+                    #print(1/0)
+
+                    if visualize:
+                        image = trigger[0]
+                        image = image.permute((1, 2, 0))*255
+                        image = image.cpu().numpy()
+                        image = Image.fromarray(image.astype('uint8'), 'RGB')
+                        #image.show()
+                        image.save('triggered_img.png')
+
+                    test_img = fns_test[0]#torch.FloatTensor(np.random.normal(0,1,fns[0].shape)).to(self.device)
+
+                    #test_img = test_img * (1-filter_shape)
+                    #test_img = test_img + trigger
+                    #print(new_data.shape, trigger.shape, test_img.shape)
+
+                    test_insertion_loc = trigger_insertion_loc + 200
+                    test_img[:,:,test_insertion_loc:test_insertion_loc+trigger_size,test_insertion_loc:test_insertion_loc+trigger_size] = trigger2
+
+                    if visualize:
+                        image = test_img[0]
+                        image = image.permute((1, 2, 0))*255
+                        image = image.cpu().numpy()
+                        image = Image.fromarray(image.astype('uint8'), 'RGB')
+                        #image.show()
+                        image.save('test_img.png')
+                    
+                    # outputs = model(test_img)
+                    # outputs = outputs[0]  # unpack the batch size of 1
+                    # boxes = outputs['boxes'].cpu().detach().numpy()
+                    # scores = outputs['scores'].cpu().detach().numpy()
+                    # labels = outputs['labels'].cpu().detach().numpy()
+                    # # wrap the network outputs into a list of annotations
+                    # pred = utils.models.wrap_network_prediction(boxes, labels)
+                    pred, scores = self.inference_sample(model, test_img, False, threshold)
+                    print(pred, scores)
+                    if len(pred) == 0 or pred[-1]['label'] - offset != tgt_cls:
+                        return [True]
+
+                    
+        return [False]
+
+    def generate_trigger(self, max_iter, new_data, model, src_cls, tgt_cls, filter_shape, epsilon, threshold, offset=1, single_class=False, sign=1, og_pred=None, og_scores=None):
+        prediction = -1
+        #og_pred, og_scores = self.inference_sample(model, new_data, False, threshold)
+        for iter_i in range(max_iter):
+            new_data.requires_grad = True
+            logits = self.get_logits(model, [new_data])
+            #print(logits.shape)
+            tgt_indices = list(range(tgt_cls+offset,min(tgt_cls+offset+10, logits.shape[2])))
+            if single_class:
+                tgt_indices = [tgt_cls+offset]
+            if not single_class and src_cls+offset in tgt_indices: tgt_indices.remove(src_cls+offset)
+            #tgt_indices = [3]
+            #max_logit_size = 0
+            #for logit_i in range(8732):
+            logit = logits[:,:,tgt_indices]#+ logits[:,:,tgt_cls-2] + logits[:,:,tgt_cls-1] + logits[:,:,tgt_cls] + logits[:,:,tgt_cls+1] + logits[:,:,tgt_cls+2]
+            #print(logits.shape)
+            gradients = torch.autograd.grad(outputs=logit, inputs=new_data, grad_outputs=torch.ones(logit.size()).to(self.device), only_inputs=True, retain_graph=True)[0]
+            signed_grad = torch.sign(gradients)
+            # if torch.sum(signed_grad) > max_logit_size:
+            #     max_logit_size = torch.sum(signed_grad)
+            #     print(max_logit_size, logit_i)
+            signed_grad = signed_grad * filter_shape
+            new_data.requires_grad = False
+            #new_data = new_data.detach()
+            new_data = new_data + sign*(epsilon * signed_grad)
+            new_data = torch.clip(new_data, 0, 1) #CLip to (0,1)
+            pred, scores = self.inference_sample(model, new_data, False, 0.05)
+            #if len(pred)>0: print(pred[-1]['label'], scores[-1])
+            #if len(pred)>0 and single_class and sign==1 and scores[-1]>.50 and prediction==-1:#and pred[-1]['label'] - offset == tgt_cls  
+            #    prediction = pred[-1]['label'] - offset
+            # if iter_i == 5:
+            #     epsilon = 0.10
+            # if iter_i == 10:
+            #     epsilon = 0.1
+            # # if iter_i == 20:
+            # #     epsilon = 0.01
+            # if iter_i == 90:
+            #     epsilon = 0.005
+
+        pred, scores = self.inference_sample(model, new_data, False, threshold)
+        #print(pred, scores, src_cls, tgt_cls, prediction)
+        if len(pred) == 0:
+            return new_data, -1
+
+        # mapping = dict()
+        # dist_threshold = 0.1
+        # for pred_i in range(len(pred)):
+        #     min_distance=1000000
+        #     for pred_i2 in range(len(og_pred)):
+        #         distance = self.dist(pred[pred_i]["bbox"], og_pred[pred_i2]["bbox"])
+        #         #print(distance, pred[pred_i]["bbox"], og_pred[pred_i2]["bbox"])
+        #         if distance < dist_threshold and distance < min_distance:
+        #             min_distance = distance
+        #             mapping[pred_i] = pred_i2
+        # #print(mapping)
+        # #print(og_pred, og_scores)
+        # for key in mapping:
+        #     print(og_pred[key]['label'], src_cls+offset, pred[mapping[key]]['label'], tgt_indices)
+        #     if og_pred[key]['label'] == src_cls+offset and pred[mapping[key]]['label'] in tgt_indices:
+        #         return new_data, prediction
+
+        #print(1/0)
+        if not single_class:
+            prediction = pred[-1]['label'] - offset
+        if pred[-1]['label'] - offset == src_cls:
+            if len(pred) > 1 and sign==1:
+                prediction = pred[-2]['label'] - offset
+            if len(pred) == 1 or sign==-1:
+                return None, None
+
+        if single_class and pred[-1]['label'] - offset != src_cls and prediction==-1:
+            prediction = pred[-1]['label'] - offset
+
+        #print(prediction)
+
+        if prediction == src_cls:
+            return None, None
+
+        if not single_class:
+            if prediction not in range(tgt_cls, tgt_cls+10):
+                return None, None
+        if single_class:
+            if prediction != tgt_cls and sign==1:
+                return None, None
+            if prediction != tgt_cls and sign==-1:
+                for i in range(len(pred)):
+                    if pred[i]['label'] - offset == tgt_cls:
+                        return None, None
+                return new_data, -1
+        #print(2, pred, scores)
+        #pred_clean, scores_clean = self.inference_sample(clean_model, new_data, False, threshold)
+        #if len(pred_clean) != 0 and pred_clean[-1]['label'] == prediction:
+        #    return None, None
+        #print(3, pred, scores)
+        #return new_data, prediction
+        return new_data, prediction#None, None
 
     def gather_images(self, examples_dirpath):
         class_dict = dict()
@@ -471,7 +1468,8 @@ class Detector(AbstractDetector):
             #if image_class == 9: break
             #break#print(1/0)
 
-        sign_insert_loc = 100
+        background_fpath = background_fpaths[1]
+        sign_insert_loc = 0
         for trigger in os.listdir(trigger_dirpath):
             image_class = int(reverse_mapping[trigger])
             #if image_class < 40: continue
@@ -499,8 +1497,8 @@ class Detector(AbstractDetector):
             else:
                 val_images[image_class] = [img]
 
-        background_fpath = background_fpaths[1]
-        sign_insert_loc = 200
+        background_fpath = background_fpaths[2]
+        sign_insert_loc = 100
         for trigger in os.listdir(trigger_dirpath):
             image_class = int(reverse_mapping[trigger])
             #if image_class < 40: continue
