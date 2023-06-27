@@ -112,7 +112,7 @@ class Detector(AbstractDetector):
         for i, model_dir in enumerate(sorted(os.listdir(models_dirpath))[:]):
             #print(model_dir)
 
-            if i != 45: continue
+            #if i != 45: continue
 
             print(os.path.join(models_dirpath, model_dir))
             if self.device == "cpu":
@@ -193,8 +193,8 @@ class Detector(AbstractDetector):
             else:
                 feature_vector = self.get_features_other(train_images, model)
             features.append(feature_vector)
-            print(features)
-            print(1/0)
+            #print(features)
+            #print(1/0)
             data = np.concatenate((np.array(features), np.expand_dims(np.array(labels),-1)), axis=1)
             #print(data)
             np.savetxt("rd13.csv", data, delimiter=",")
@@ -790,7 +790,7 @@ class Detector(AbstractDetector):
 
                 for src_cls in train_images:
                     #if src_cls < 60: continue#9: continue
-                    if src_cls != 16: continue
+                    #if src_cls != 61: continue
                     #if int(image_class_dirpath) %3 != 1: continue
                     #print(src_cls)
                     #if isinstance(images[src_cls][0], int):
@@ -896,7 +896,7 @@ class Detector(AbstractDetector):
                         if scores[-1] < 0.80:
                             continue
                                                     
-                        print(src_cls, prediction, scores[-1])
+                        #print(src_cls, prediction, scores[-1])
                         return [True]
                         #print(pred, scores)
                         #continue#print(1/0)
@@ -983,7 +983,7 @@ class Detector(AbstractDetector):
             val_images = []
 
             first_trigger = True
-            visualize = True
+            visualize = False
             threshold = .22
             train_images_send = copy.deepcopy(train_images)
             val_images_send = copy.deepcopy(val_images)
@@ -1874,10 +1874,11 @@ class Detector(AbstractDetector):
         dir_components = model_filepath.split("/")
         models_dirpath = "/".join(dir_components[:-2])
         model_dir = dir_components[-2]
-        images = self.gather_images(os.path.join(models_dirpath, model_dir, "clean-example-data"))
+        #images = self.gather_images(os.path.join(models_dirpath, model_dir, "clean-example-data"))
         #images = self.generate_images(models_dirpath, model_dir, model)
+        train_images, val_images, test_images = self.generate_images(models_dirpath, model_dir, model)
 
-        if images == None:
+        if train_images == None:
             probability = 0.5
         else:
             with open(os.path.join(models_dirpath, model_dir, "config.json")) as f:
@@ -1885,15 +1886,20 @@ class Detector(AbstractDetector):
 
             #arch = config["py/state"]["model_architecture"]
 
-            feature_vector = self.get_features_misclass(images, model)
+            # feature_vector = self.get_features_misclass(images, model)
 
-            feature_vector = np.array([feature_vector])
+            # feature_vector = np.array([feature_vector])
+
+            if len(list(model.named_parameters())) == 326:
+                feature_vector = self.get_features_detr(train_images, val_images, test_images, model)
+            else:
+                feature_vector = self.get_features_other(train_images, model)
 
             # with open(os.path.join(self.learned_parameters_dirpath, "clf.joblib"), "rb") as fp:
             #     clf = pickle.load(fp)
             # probability = np.clip(clf.predict_proba(feature_vector)[0][1], 0.25, 0.75)
-
-            if feature_vector == True:
+            #print(feature_vector)
+            if feature_vector[0] == True:
                 probability = 0.7
             else:
                 probability = 0.3
