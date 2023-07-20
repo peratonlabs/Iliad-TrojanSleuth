@@ -11,8 +11,9 @@ import json
 import jsonpickle
 import pickle
 import numpy as np
+import random
 
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, BaggingClassifier
 
 from utils.abstract import AbstractDetector
 from utils.models import load_model, load_models_dirpath
@@ -80,6 +81,15 @@ class Detector(AbstractDetector):
         self.write_metaparameters()
         logging.info("Configuration done!")
 
+        model_path_list = sorted([os.path.join(models_dirpath, model) for model in os.listdir(models_dirpath)])
+        random.shuffle(model_path_list)
+        logging.info(f"Loading %d models...", len(model_path_list))
+
+        model_repr_dict, model_ground_truth_dict = load_models_dirpath(model_path_list)
+
+        #basicFCModels = model_repr_dict['BasicFCModel']
+        #rlStarterModels = model_repr_dict['SimplifiedRLStarter']
+
         clf_rf = RandomForestClassifier(n_estimators=500)
         device = 'cpu'
 
@@ -96,23 +106,26 @@ class Detector(AbstractDetector):
             features = []
             labels = []
             #idx = 0
-            idx = np.random.choice(train_sizes[arch_i], size=train_sizes[arch_i], replace=False)
+            #idx = np.random.choice(train_sizes[arch_i], size=train_sizes[arch_i], replace=False)
 
-            for parameter_index in range(size-2):
+            for parameter_index in range(size):
                 params = []
                 labels = []
                 #print(parameter_index)
 
-                for i, model_dirpath in enumerate(sorted(os.listdir(models_dirpath))):
+                for i, model_dirpath in enumerate(model_path_list):
 
-                    with open(os.path.join(models_dirpath, model_dirpath, "model.info.json")) as f:
+                    with open(os.path.join(model_dirpath, "model.info.json")) as f:
                         config = json.load(f)
                     meta_arch = config['model']
                     #print(meta_arch)
                     if arch != meta_arch:
                         continue
-                    model_filepath = os.path.join(models_dirpath, model_dirpath, "model.pt")
-                    model = torch.load(model_filepath)
+                    model_filepath = os.path.join(model_dirpath, "model.pt")
+                    #model = torch.load(model_filepath)
+                    model, model_repr, model_class = load_model(model_filepath)
+                    #print(model_repr, model_class)
+                    #print(1/0)
                     model.to(device)
                     model.eval()
 
@@ -122,48 +135,50 @@ class Detector(AbstractDetector):
                     #print(i)
                     params.append(param.detach().cpu().numpy())
 
-                    label = np.loadtxt(os.path.join(models_dirpath, model_dirpath, 'ground_truth.csv'), dtype=bool)
+                    label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
                     labels.append(int(label))
                 params = np.array(params).astype(np.float32)
                 labels = np.expand_dims(np.array(labels),-1)
                 #print(params.shape, labels.shape)
                 #print(1/0)
-                params = params[idx, :]
-                labels = labels[idx]
-                if params.shape[1] > 3000000:
-                    avg_feats = np.mean(params, axis=0)
-                    importance = np.argsort(np.abs(avg_feats))[-100:]
-                    #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
-                    importances.append(importance)
-                else:
-                    cutoff = int(params.shape[0]*0.75)
-                    X_train = params[:cutoff,:]
-                    X_test = params[cutoff:,:]
-                    y_train = labels[:cutoff]
-                    y_test = labels[cutoff:]
-                    #clf = clf_rf.fit(X_train, y_train)
-                    clf = clf_rf.fit(X_train, y_train)
+                #params = params[idx, :]
+                #labels = labels[idx]
+                # if params.shape[1] > 3000000:
+                    # avg_feats = np.mean(params, axis=0)
+                    # importance = np.argsort(np.abs(avg_feats))[-100:]
+                    # #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
+                    # importances.append(importance)
 
-                    # importance = np.argsort(clf.feature_importances_)[-500:]
-                    # plt.barh(range(len(importance)), clf.feature_importances_[importance], color='b', align='center')
-                    # plt.xlabel('Decrease in impurity', fontsize = 20)
-                    # plt.title('Feature importance', fontsize = 20)
-                    # plt.savefig('mip_features_roberta_qa'+str(parameter_index)+'.svg')# save the fig as pdf file
-                    # plt.clf()
-                    importance = np.argsort(clf.feature_importances_)[-100:]
-                    #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
-                    importances.append(importance)
+                # else:
+                cutoff = int(params.shape[0]*0.75)
+                X_train = params[:cutoff,:]
+                X_test = params[cutoff:,:]
+                y_train = labels[:cutoff]
+                y_test = labels[cutoff:]
+                #clf = clf_rf.fit(X_train, y_train)
+                clf = clf_rf.fit(X_train, y_train)
+
+                # importance = np.argsort(clf.feature_importances_)[-500:]
+                # plt.barh(range(len(importance)), clf.feature_importances_[importance], color='b', align='center')
+                # plt.xlabel('Decrease in impurity', fontsize = 20)
+                # plt.title('Feature importance', fontsize = 20)
+                # plt.savefig('mip_features_roberta_qa'+str(parameter_index)+'.svg')# save the fig as pdf file
+                # plt.clf()
+                importance = np.argsort(clf.feature_importances_)[-100:]
+                #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
+                importances.append(importance)
             #print(1/0)
             #print(np.array(importances).shape)
-            for i, model_dirpath in enumerate(sorted(os.listdir(models_dirpath))):
+            for i, model_dirpath in enumerate(model_path_list):
 
-                with open(os.path.join(models_dirpath, model_dirpath, "model.info.json")) as f:
+                with open(os.path.join(model_dirpath, "model.info.json")) as f:
                     config = json.load(f)
                 meta_arch = config['model']
                 if arch != meta_arch:
                     continue
-                model_filepath = os.path.join(models_dirpath, model_dirpath, "model.pt")
-                model = torch.load(model_filepath)
+                model_filepath = os.path.join(model_dirpath, "model.pt")
+                #model = torch.load(model_filepath)
+                model, model_repr, model_class = load_model(model_filepath)
                 # move the model to the device
                 model.to(device)
                 model.eval()
@@ -178,8 +193,8 @@ class Detector(AbstractDetector):
                 
             #arch = arch.replace("google/", "")
             features = np.array(features)
-            features = features[idx,:]
-            labels = labels[idx]
+            #features = features[idx,:]
+            #labels = labels[idx]
             #labels = np.expand_dims(np.array(labels),-1)
             print(features.shape, labels.shape)
             data = np.concatenate((features, labels), axis=1)
@@ -255,21 +270,23 @@ class Detector(AbstractDetector):
         clf = clf_rf.fit(X_train, y_train)
         importance_full = np.argsort(clf.feature_importances_)
         importance = importance_full[-1000:]
+        #avg_feats = np.mean(X_train, axis=0)
+        #importance = np.argsort(np.abs(avg_feats))[:]
         #print(X[:,importance].shape)
         X_train = X_train[:,importance]
         #X_train = sc.fit_transform(X_train)
         #X_train = scale(X_train, axis=1)
         X_test = X_test[:,importance]
-        #X_test = sc.fit_transform(X_test)
+        #X_test = sc.transform(X_test)
         #X_test = scale(X_test, axis=1)
         #clf_svm.fit(X_train,y_train)
         parameters = {'gamma':[0.001,0.005,0.01,0.02], 'C':[0.1,1,10,100]}
         #parameters = {'min_samples_split':[5,10,20,50], 'min_samples_leaf':[5,10]}
-        #clf_svm = GridSearchCV(clf_svm, parameters)
+        clf_svm = GridSearchCV(clf_svm, parameters)
         clf_rf = RandomForestClassifier(n_estimators=500)
         #clf_rf = CalibratedClassifierCV(clf_rf, ensemble=False)
         #eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm)], voting='soft')
-        #clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
+        clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
         clf = clf_rf
         clf.fit(X_train, y_train)
         print(arch)
@@ -373,9 +390,10 @@ class Detector(AbstractDetector):
         """
 
         device = 'cpu'
-        model = torch.load(model_filepath)
+        model, model_repr, model_class = load_model(model_filepath)
         model.to(device)
         model.eval()
+        #self.inference_on_example_data(model, examples_dirpath)
 
         sizes = [12, 18]
         archs = ["BasicFCModel", "SimplifiedRLStarter"]
