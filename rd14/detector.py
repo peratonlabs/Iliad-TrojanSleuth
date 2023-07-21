@@ -284,7 +284,7 @@ class Detector(AbstractDetector):
         #parameters = {'min_samples_split':[5,10,20,50], 'min_samples_leaf':[5,10]}
         clf_svm = GridSearchCV(clf_svm, parameters)
         clf_rf = RandomForestClassifier(n_estimators=500)
-        #clf_rf = CalibratedClassifierCV(clf_rf, ensemble=False)
+        clf_rf = CalibratedClassifierCV(clf_rf, ensemble=False)
         #eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm)], voting='soft')
         clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
         clf = clf_rf
