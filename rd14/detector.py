@@ -287,7 +287,7 @@ class Detector(AbstractDetector):
         clf_rf = CalibratedClassifierCV(clf_rf, ensemble=False)
         #eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm)], voting='soft')
         clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
-        clf = clf_rf
+        clf = clf_svm
         clf.fit(X_train, y_train)
         print(arch)
         print(clf.score(X_train, y_train), roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]), log_loss(y_train, clf.predict_proba(X_train)[:,1]))
