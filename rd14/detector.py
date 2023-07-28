@@ -93,7 +93,7 @@ class Detector(AbstractDetector):
 
         model_repr_dict, model_ground_truth_dict = load_models_dirpath(model_path_list)
 
-        clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
+        #clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
         device = 'cpu'
 
         sizes = [12, 18]
@@ -151,15 +151,15 @@ class Detector(AbstractDetector):
                     # importances.append(importance)
 
                 # else:
-                cutoff = int(params.shape[0]*0.75)
-                X_train = params[:cutoff,:]
-                X_test = params[cutoff:,:]
-                y_train = labels[:cutoff]
-                y_test = labels[cutoff:]
-                clf = clf_rf.fit(X_train, y_train)
+                # cutoff = int(params.shape[0]*0.75)
+                # X_train = params[:cutoff,:]
+                # X_test = params[cutoff:,:]
+                # y_train = labels[:cutoff]
+                # y_test = labels[cutoff:]
+                # clf = clf_rf.fit(X_train, y_train)
 
-                importance = np.argsort(clf.feature_importances_)[-100:]
-                #importance = np.array(range(params.shape[1]))
+                # importance = np.argsort(clf.feature_importances_)[-100:]
+                importance = np.array(range(params.shape[1]))
                 importances.append(importance)
             #print(1/0)
             for i, model_dirpath in enumerate(model_path_list):
