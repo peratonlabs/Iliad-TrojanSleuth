@@ -1,15 +1,31 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Peraton Trojan Detection Container",
-  "technique": "Random Forest WA",
-  "technique_description": "Extracts model weights based on random forest feature importance and trains a final classifier.",
-  "technique_changes": "SVM as final classifier",
-  "technique_type": ["Weight Analysis"],
-  "commit_id": "",
-  "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd14",
-  "required": [],
-  "additionalProperties": false,
-  "type": "object",
-  "properties": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Peraton Trojan Detection Container",
+    "technique": "Random Forest WA",
+    "technique_description": "Extracts model weights based on random forest feature importance and trains a final classifier.",
+    "technique_changes": "SVM as final classifier with calibration",
+    "technique_type": ["Weight Analysis"],
+    "commit_id": "",
+    "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd14",
+    "required": [],
+    "additionalProperties": false,
+    "type": "object",
+    "properties": {
+        "random_forest_num_trees":  {
+            "description": "Number of trees in the random forest used for comuting feature importance.",
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 1000,
+            "suggested_minimum": 300,
+            "suggested_maximum": 700
+        },
+          "num_features": {
+            "description": "Number of features to train the final classifier on.",
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 10000,
+            "suggested_minimum": 500,
+            "suggested_maximum": 2500
+        }
+    }
   }
-}

@@ -46,10 +46,14 @@ class Detector(AbstractDetector):
         self.metaparameter_filepath = metaparameter_filepath
         self.learned_parameters_dirpath = learned_parameters_dirpath
         self.model_filepath = os.path.join(self.learned_parameters_dirpath, "model.bin")
+        self.random_forest_num_trees = metaparameters["random_forest_num_trees"]
+        self.num_features = metaparameters["num_features"]
 
 
     def write_metaparameters(self):
         metaparameters = {
+            "random_forest_num_trees": self.random_forest_num_trees,
+            "num_features": self.num_features
         }
 
         with open(os.path.join(self.learned_parameters_dirpath, os.path.basename(self.metaparameter_filepath)), "w") as fp:
@@ -63,9 +67,11 @@ class Detector(AbstractDetector):
         Args:
             models_dirpath: str - Path to the list of model to use for training
         """
-        for random_seed in np.random.randint(1000, 9999, 10):
-            self.weight_params["rso_seed"] = random_seed
-            self.manual_configure(models_dirpath)
+        for num_trees in range(300,701,100):
+            for num_features in range(500,2501,500):
+                self.random_forest_num_trees = num_trees
+                self.num_features = num_features
+                self.manual_configure(models_dirpath)
 
     def manual_configure(self, models_dirpath: str):
         """Configuration of the detector using the parameters from the metaparameters
@@ -87,10 +93,7 @@ class Detector(AbstractDetector):
 
         model_repr_dict, model_ground_truth_dict = load_models_dirpath(model_path_list)
 
-        #basicFCModels = model_repr_dict['BasicFCModel']
-        #rlStarterModels = model_repr_dict['SimplifiedRLStarter']
-
-        clf_rf = RandomForestClassifier(n_estimators=500)
+        clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
         device = 'cpu'
 
         sizes = [12, 18]
@@ -122,9 +125,7 @@ class Detector(AbstractDetector):
                     if arch != meta_arch:
                         continue
                     model_filepath = os.path.join(model_dirpath, "model.pt")
-                    #model = torch.load(model_filepath)
                     model, model_repr, model_class = load_model(model_filepath)
-                    #print(model_repr, model_class)
                     #print(1/0)
                     model.to(device)
                     model.eval()
@@ -155,20 +156,12 @@ class Detector(AbstractDetector):
                 X_test = params[cutoff:,:]
                 y_train = labels[:cutoff]
                 y_test = labels[cutoff:]
-                #clf = clf_rf.fit(X_train, y_train)
                 clf = clf_rf.fit(X_train, y_train)
 
-                # importance = np.argsort(clf.feature_importances_)[-500:]
-                # plt.barh(range(len(importance)), clf.feature_importances_[importance], color='b', align='center')
-                # plt.xlabel('Decrease in impurity', fontsize = 20)
-                # plt.title('Feature importance', fontsize = 20)
-                # plt.savefig('mip_features_roberta_qa'+str(parameter_index)+'.svg')# save the fig as pdf file
-                # plt.clf()
                 importance = np.argsort(clf.feature_importances_)[-100:]
-                #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
+                #importance = np.array(range(params.shape[1]))
                 importances.append(importance)
             #print(1/0)
-            #print(np.array(importances).shape)
             for i, model_dirpath in enumerate(model_path_list):
 
                 with open(os.path.join(model_dirpath, "model.info.json")) as f:
@@ -179,19 +172,16 @@ class Detector(AbstractDetector):
                 model_filepath = os.path.join(model_dirpath, "model.pt")
                 #model = torch.load(model_filepath)
                 model, model_repr, model_class = load_model(model_filepath)
-                # move the model to the device
                 model.to(device)
                 model.eval()
 
                 feature_vector = self.weight_analysis_configure(model, arch, size, importances, device)
                 if feature_vector == None:
                     continue
-                #real_summary_size = summary_size
                 feature_vector = feature_vector.detach().cpu().numpy()
                 features.append(feature_vector)
                 
                 
-            #arch = arch.replace("google/", "")
             features = np.array(features)
             #features = features[idx,:]
             #labels = labels[idx]
@@ -207,12 +197,10 @@ class Detector(AbstractDetector):
     
 
     def get_param(self, model, arch, parameter_index, device):
-        #print(arch)
         params = []
         for param in model.named_parameters():
             params.append(torch.flatten(param[1]))
         #print(len(params), arch)
-        #print(1/0)
         param = params[parameter_index]
         return param
 
@@ -246,7 +234,7 @@ class Detector(AbstractDetector):
 
         sc = StandardScaler()
         #clf = clf_lr.fit(sc.fit_transform(X), y)
-        clf_rf = RandomForestClassifier(n_estimators=500)
+        clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
         clf_svm = SVC(probability=True, kernel='rbf')
         clf_lr = LogisticRegression()
 
@@ -264,30 +252,23 @@ class Detector(AbstractDetector):
         y_train = y[:cutoff]
         y_test = y[cutoff:]
 
-        num_splits = 10
-        total_num_feats = -100
-
         clf = clf_rf.fit(X_train, y_train)
         importance_full = np.argsort(clf.feature_importances_)
-        importance = importance_full[-1000:]
-        #avg_feats = np.mean(X_train, axis=0)
-        #importance = np.argsort(np.abs(avg_feats))[:]
-        #print(X[:,importance].shape)
+        importance = importance_full[-1*self.num_features:]
         X_train = X_train[:,importance]
         #X_train = sc.fit_transform(X_train)
         #X_train = scale(X_train, axis=1)
         X_test = X_test[:,importance]
         #X_test = sc.transform(X_test)
         #X_test = scale(X_test, axis=1)
-        #clf_svm.fit(X_train,y_train)
         parameters = {'gamma':[0.001,0.005,0.01,0.02], 'C':[0.1,1,10,100]}
         #parameters = {'min_samples_split':[5,10,20,50], 'min_samples_leaf':[5,10]}
         clf_svm = GridSearchCV(clf_svm, parameters)
-        clf_rf = RandomForestClassifier(n_estimators=500)
-        clf_rf = CalibratedClassifierCV(clf_rf, ensemble=False)
-        #eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm)], voting='soft')
         clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
+        clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
+        #eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm)], voting='soft')
         clf = clf_svm
+        clf = CalibratedClassifierCV(clf, ensemble=False)
         clf.fit(X_train, y_train)
         print(arch)
         print(clf.score(X_train, y_train), roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]), log_loss(y_train, clf.predict_proba(X_train)[:,1]))
