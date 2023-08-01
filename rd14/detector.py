@@ -268,7 +268,7 @@ class Detector(AbstractDetector):
         clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
         #eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm)], voting='soft')
         clf = clf_svm
-        clf = CalibratedClassifierCV(clf, ensemble=False)
+        #clf = CalibratedClassifierCV(clf, ensemble=False)
         clf.fit(X_train, y_train)
         print(arch)
         print(clf.score(X_train, y_train), roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]), log_loss(y_train, clf.predict_proba(X_train)[:,1]))
