@@ -390,17 +390,13 @@ class Detector(AbstractDetector):
             overall_importances = load(os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch+".joblib"))
 
             features = self.weight_analysis_configure(model, arch, size, importances, device)
-
+            import math
             if features != None:
                 features = np.array(features.detach().cpu()).reshape(1,-1)
                 features = features[:,overall_importances]
                 #trojan_probability = clf.predict_proba(scaler.transform(features_full))[0][1]
                 trojan_probability = clf.predict_proba(features)[0][1]
-                if trojan_probability < 0.5:
-                    trojan_probability = 0.01
-                if trojan_probability > 0.5:
-                    trojan_probability = 0.99
-
+                trojan_probability = np.tanh(3*(trojan_probability*2-1))/2+0.5
                 logging.info('Trojan Probability: {}'.format(trojan_probability))
 
                 with open(result_filepath, 'w') as fh:

@@ -3,7 +3,7 @@
     "title": "Peraton Trojan Detection Container",
     "technique": "Random Forest WA",
     "technique_description": "Extracts model weights based on random forest feature importance and trains a final classifier.",
-    "technique_changes": "100 most important features selected for final classifer instead of 1000",
+    "technique_changes": "Probabilities passed through tanh",
     "technique_type": ["Weight Analysis"],
     "commit_id": "",
     "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd14",
