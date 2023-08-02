@@ -396,6 +396,10 @@ class Detector(AbstractDetector):
                 features = features[:,overall_importances]
                 #trojan_probability = clf.predict_proba(scaler.transform(features_full))[0][1]
                 trojan_probability = clf.predict_proba(features)[0][1]
+                if trojan_probability < 0.5:
+                    trojan_probability = 0.01
+                if trojan_probability > 0.5:
+                    trojan_probability = 0.99
 
                 logging.info('Trojan Probability: {}'.format(trojan_probability))
 
