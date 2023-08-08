@@ -396,7 +396,11 @@ class Detector(AbstractDetector):
                 features = features[:,overall_importances]
                 #trojan_probability = clf.predict_proba(scaler.transform(features_full))[0][1]
                 trojan_probability = clf.predict_proba(features)[0][1]
-                trojan_probability = np.tanh(3*(trojan_probability*2-1))/2+0.5
+                #trojan_probability = np.tanh(3*(trojan_probability*2-1))/2+0.5
+                if trojan_probability < 0.2:
+                    trojan_probability = 0
+                if trojan_probability > 0.8:
+                    trojan_probability = 1
                 logging.info('Trojan Probability: {}'.format(trojan_probability))
 
                 with open(result_filepath, 'w') as fh:
