@@ -93,7 +93,7 @@ class Detector(AbstractDetector):
 
         model_repr_dict, model_ground_truth_dict = load_models_dirpath(model_path_list)
 
-        #clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
+        clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
         device = 'cpu'
 
         sizes = [12, 18]
@@ -151,15 +151,15 @@ class Detector(AbstractDetector):
                     # importances.append(importance)
 
                 # else:
-                # cutoff = int(params.shape[0]*0.75)
-                # X_train = params[:cutoff,:]
-                # X_test = params[cutoff:,:]
-                # y_train = labels[:cutoff]
-                # y_test = labels[cutoff:]
-                # clf = clf_rf.fit(X_train, y_train)
+                cutoff = int(params.shape[0]*0.75)
+                X_train = params[:cutoff,:]
+                X_test = params[cutoff:,:]
+                y_train = labels[:cutoff]
+                y_test = labels[cutoff:]
+                clf = clf_rf.fit(X_train, y_train)
 
-                # importance = np.argsort(clf.feature_importances_)[-100:]
-                importance = np.array(range(params.shape[1]))
+                importance = np.argsort(clf.feature_importances_)[-100:]
+                #importance = np.array(range(params.shape[1]))
                 importances.append(importance)
             #print(1/0)
             for i, model_dirpath in enumerate(model_path_list):
@@ -271,8 +271,10 @@ class Detector(AbstractDetector):
         #clf = CalibratedClassifierCV(clf, ensemble=False)
         clf.fit(X_train, y_train)
         print(arch)
-        print(clf.score(X_train, y_train), roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]), log_loss(y_train, clf.predict_proba(X_train)[:,1]))
-        print(clf.score(X_test, y_test), roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]), log_loss(y_test, clf.predict_proba(X_test)[:,1]))
+        #print(clf.score(X_train, y_train), roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]), log_loss(y_train, clf.predict_proba(X_train)[:,1]))
+        #print(clf.score(X_test, y_test), roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]), log_loss(y_test, clf.predict_proba(X_test)[:,1]))
+        print(self.custom_accuracy_function(clf, X_train, y_train), self.custom_scoring_function(clf, X_train, y_train), self.custom_loss_function(clf, X_train, y_train))
+        print(self.custom_accuracy_function(clf, X_test, y_test), self.custom_scoring_function(clf, X_test, y_test), self.custom_loss_function(clf, X_test, y_test))
 
         X = X[:,importance]
         clf.fit(X, y)
@@ -284,10 +286,15 @@ class Detector(AbstractDetector):
         return estimator.score(X, y)
 
     def custom_scoring_function(self, estimator, X, y):
-        return roc_auc_score(y, estimator.predict_proba(X)[:,1])
+        return roc_auc_score(y, self.clip(estimator.predict_proba(X)[:,1]))
         
     def custom_loss_function(self, estimator, X, y):
-        return log_loss(y, estimator.predict_proba(X)[:,1])
+        return log_loss(y, self.clip(estimator.predict_proba(X)[:,1]))
+
+    def clip(self, p):
+        p[p < 0.3] = 0.001
+        p[p > 0.7] = 0.999
+        return p
 
 
 
@@ -397,10 +404,10 @@ class Detector(AbstractDetector):
                 #trojan_probability = clf.predict_proba(scaler.transform(features_full))[0][1]
                 trojan_probability = clf.predict_proba(features)[0][1]
                 #trojan_probability = np.tanh(3*(trojan_probability*2-1))/2+0.5
-                if trojan_probability < 0.2:
-                    trojan_probability = 0
-                if trojan_probability > 0.8:
-                    trojan_probability = 1
+                if trojan_probability < 0.3:
+                    trojan_probability = 0.001
+                if trojan_probability > 0.7:
+                    trojan_probability = 0.999
                 logging.info('Trojan Probability: {}'.format(trojan_probability))
 
                 with open(result_filepath, 'w') as fh:
