@@ -3,7 +3,7 @@
   "title": "Peraton Trojan Detection Container",
   "technique": "Random Forest WA",
   "technique_description": "Extracts model weights based on random forest feature importance and trains a final classifier on them.",
-  "technique_changes": "Initial submission",
+  "technique_changes": "Fixed filepath name bug",
   "technique_type": ["Weight Analysis"],
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd15",
@@ -24,7 +24,7 @@
         "type": "integer",
         "minimum": 10,
         "maximum": 20000,
-        "suggested_minimum": 100,
+        "suggested_minimum": 500,
         "suggested_maximum": 2500
     }
     }

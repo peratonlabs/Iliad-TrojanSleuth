@@ -10,9 +10,9 @@ import os
 import json
 import jsonpickle
 import pickle
+import torch
 import numpy as np
 import datasets
-import torch
 import transformers
 
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, BaggingClassifier, VotingClassifier
@@ -425,7 +425,7 @@ class Detector(AbstractDetector):
         model.to(device)
         model.eval()
 
-        model_path_list = sorted([os.path.join(round_training_dataset_dirpath, model) for model in os.listdir(round_training_dataset_dirpath)])
+        model_path_list = sorted([os.path.join(round_training_dataset_dirpath, "models", model) for model in os.listdir(os.path.join(round_training_dataset_dirpath, "models"))])
         archs, sizes = self.get_architecture_sizes(model_path_list)
 
         for arch_i in range(len(archs)):
