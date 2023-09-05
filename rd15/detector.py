@@ -96,6 +96,8 @@ class Detector(AbstractDetector):
         for arch_i in range(len(archs)):
 
             arch = archs[arch_i]
+            arch_name = arch.split("/")[1]
+            #if "tinyroberta" not in arch: continue
             size = sizes[arch_i]
             #print(arch)
             importances = []
@@ -155,6 +157,7 @@ class Detector(AbstractDetector):
                     #importance = np.array(range(params.shape[1]))
                     importances.append(importance)
                 print("parameter_index: ", parameter_index)
+            dump(np.array(importances), os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib"))
             #print(1/0)
             for i, model_dirpath in enumerate(model_path_list):
 
@@ -182,14 +185,16 @@ class Detector(AbstractDetector):
             #labels = np.expand_dims(np.array(labels),-1)
             print(features.shape, labels.shape)
             data = np.concatenate((features, labels), axis=1)
-
+            #dump(data, os.path.join("data_"+arch_name+".joblib"))
+            #continue
+            #data = load(os.path.join("data_"+arch_name+".joblib"))
+            #data2 = load(os.path.join("data_weights/data_"+arch_name+".joblib"))
+            #data = np.concatenate((data[:,:-1], data2), axis=1)
             model, scaler, overall_importance = self.train_model(data, arch)
 
-            arch_name = arch.split("/")[1]
             logging.info("Saving model...")
             dump(scaler, os.path.join(self.learned_parameters_dirpath, "scaler_"+arch_name+".joblib"))
             dump(model, os.path.join(self.learned_parameters_dirpath, "clf_"+arch_name+".joblib"))
-            dump(np.array(importances), os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib"))
             dump(overall_importance, os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch_name+".joblib"))
 
         self.write_metaparameters()
@@ -289,7 +294,7 @@ class Detector(AbstractDetector):
         clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
         clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
         eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm), ('lr', clf_lr)], voting='soft')
-        clf = eclf
+        clf = clf_rf
         #clf = CalibratedClassifierCV(clf, ensemble=False)
         clf.fit(X_train, y_train)
         print(arch)
