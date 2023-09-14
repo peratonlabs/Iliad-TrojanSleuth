@@ -368,8 +368,10 @@ class Detector(AbstractDetector):
         model.eval()
         #self.inference_on_example_data(model, examples_dirpath)
 
-        model_path_list = sorted([os.path.join(round_training_dataset_dirpath, "models", model) for model in os.listdir(os.path.join(round_training_dataset_dirpath, "models"))])
-        archs, sizes = self.get_architecture_sizes(model_path_list)
+        #model_path_list = sorted([os.path.join(round_training_dataset_dirpath, "models", model) for model in os.listdir(os.path.join(round_training_dataset_dirpath, "models"))])
+        #archs, sizes = self.get_architecture_sizes(model_path_list)
+        archs = ["BasicFCModel"]
+        sizes = [16]
 
         for arch_i in range(len(archs)):
 
