@@ -235,7 +235,7 @@ class Detector(AbstractDetector):
             #if 'weight' in param[0]:
             layer = torch.flatten(param[1])
             #print(layer.shape)
-            if counter not in mapping:
+            if size==16 and counter not in mapping:
                 continue
             #importance_indices = importances[mapping[counter]]
             weights = layer[:]
@@ -364,20 +364,23 @@ class Detector(AbstractDetector):
     ):
         device = 'cpu'
         model, model_repr, model_class = load_model(model_filepath)
+        #model = torch.load(model_filepath)
         model.to(device)
         model.eval()
         #self.inference_on_example_data(model, examples_dirpath)
 
         #model_path_list = sorted([os.path.join(round_training_dataset_dirpath, "models", model) for model in os.listdir(os.path.join(round_training_dataset_dirpath, "models"))])
         #archs, sizes = self.get_architecture_sizes(model_path_list)
-        archs = ["BasicFCModel"]
-        sizes = [16]
+        archs = ["BasicFCModel", "SimplifiedRLStarter"]
+        sizes = [16, 18]
 
         for arch_i in range(len(archs)):
 
             arch = archs[arch_i]
             if arch == "FCModel":
                 arch = "BasicFCModel"
+            if arch == "CNNModel":
+                arch = "SimplifiedRLStarter"
             size = sizes[arch_i]
 
             clf = load(os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
