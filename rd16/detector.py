@@ -223,6 +223,7 @@ class Detector(AbstractDetector):
 
     def weight_analysis_configure(self, model, arch, size, device):
         model_size = len(list(model.named_parameters()))
+        #print(list(model.named_parameters()))
         #print(model_size, size)
         if model_size != size:
             return None
@@ -237,12 +238,14 @@ class Detector(AbstractDetector):
             #print(layer.shape)
             if size==16 and counter not in mapping:
                 continue
+            if size==18 and counter != size-1:
+                continue
             #importance_indices = importances[mapping[counter]]
             weights = layer[:]
             params.append(weights)
 
-        #if len(params) != size:
-        #    return None, 0
+        #if len(params) == 0:
+        #    return None
         params = torch.cat((params), dim=0)
         return params
 
