@@ -222,31 +222,27 @@ class Detector(AbstractDetector):
         return param
 
     def weight_analysis_configure(self, model, arch, size, device):
-        model_size = len(list(model.named_parameters()))
-        #print(list(model.named_parameters()))
-        #print(model_size, size)
-        if model_size != size:
-            return None
         params = []
-        mapping = {5:3, 6:4, 7:5, 8:6, 9:7, 12:8, 13:9, 14:10, 15:11}
-        for counter, param in enumerate(model.named_parameters()):
-            #print(param[1].shape)
-            #if counter == len(importances):
-            #    break
-            #if 'weight' in param[0]:
-            layer = torch.flatten(param[1])
-            #print(layer.shape)
-            if size==16 and counter not in mapping:
-                continue
-            if size==18 and counter != size-1:
-                continue
-            #importance_indices = importances[mapping[counter]]
-            weights = layer[:]
-            params.append(weights)
+        if arch != "BasicFCModel":
+            layer = torch.flatten(list(model.named_parameters())[-1][1])
+            params.append(layer[0])
+            params=torch.tensor(params)
+        else:
+            mapping = {5:3, 6:4, 7:5, 8:6, 9:7, 12:8, 13:9, 14:10, 15:11}
+            for counter, param in enumerate(model.named_parameters()):
+                #print(param[1].shape)
+                #if counter == len(importances):
+                #    break
+                #if 'weight' in param[0]:
+                layer = torch.flatten(param[1])
+                #print(layer.shape)
+                if counter not in mapping:
+                    continue
+                #importance_indices = importances[mapping[counter]]
+                weights = layer[:]
+                params.append(weights)
 
-        #if len(params) == 0:
-        #    return None
-        params = torch.cat((params), dim=0)
+            params = torch.cat((params), dim=0)
         return params
 
 
@@ -371,35 +367,33 @@ class Detector(AbstractDetector):
         model.to(device)
         model.eval()
         #self.inference_on_example_data(model, examples_dirpath)
-
+        model_size = len(list(model.named_parameters()))
+        #print(model_size)
         #model_path_list = sorted([os.path.join(round_training_dataset_dirpath, "models", model) for model in os.listdir(os.path.join(round_training_dataset_dirpath, "models"))])
         #archs, sizes = self.get_architecture_sizes(model_path_list)
-        archs = ["BasicFCModel", "SimplifiedRLStarter"]
-        sizes = [16, 18]
+        #archs = ["BasicFCModel", "SimplifiedRLStarter"]
+        #sizes = [16, 18]
+        
+        if model_size == 16:
+            arch = "BasicFCModel"
+        else:
+            arch = "SimplifiedRLStarter"
 
-        for arch_i in range(len(archs)):
 
-            arch = archs[arch_i]
-            if arch == "FCModel":
-                arch = "BasicFCModel"
-            if arch == "CNNModel":
-                arch = "SimplifiedRLStarter"
-            size = sizes[arch_i]
+        clf = load(os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
+        #scaler = load(os.path.join(self.learned_parameters_dirpath, "scaler_"+arch+".joblib"))
+        #importances = load(os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib")).tolist()
+        overall_importances = load(os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch+".joblib"))
 
-            clf = load(os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
-            #scaler = load(os.path.join(self.learned_parameters_dirpath, "scaler_"+arch+".joblib"))
-            #importances = load(os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib")).tolist()
-            overall_importances = load(os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch+".joblib"))
+        features = self.weight_analysis_configure(model, arch, model_size, device)
+        import math
+        if features != None:
+            features = np.array(features.detach().cpu()).reshape(1,-1)
+            features = features[:,overall_importances]
+            #trojan_probability = clf.predict_proba(scaler.transform(features_full))[0][1]
+            trojan_probability = clf.predict_proba(features)[0][1]
+            #trojan_probability = np.tanh(3*(trojan_probability*2-1))/2+0.5
+            logging.info('Trojan Probability: {}'.format(trojan_probability))
 
-            features = self.weight_analysis_configure(model, arch, size, device)
-            import math
-            if features != None:
-                features = np.array(features.detach().cpu()).reshape(1,-1)
-                features = features[:,overall_importances]
-                #trojan_probability = clf.predict_proba(scaler.transform(features_full))[0][1]
-                trojan_probability = clf.predict_proba(features)[0][1]
-                #trojan_probability = np.tanh(3*(trojan_probability*2-1))/2+0.5
-                logging.info('Trojan Probability: {}'.format(trojan_probability))
-
-                with open(result_filepath, 'w') as fh:
-                    fh.write("{}".format(trojan_probability))
+            with open(result_filepath, 'w') as fh:
+                fh.write("{}".format(trojan_probability))
