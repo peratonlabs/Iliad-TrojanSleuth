@@ -1,4 +1,4 @@
 {
     "random_forest_num_trees": 500,
-    "num_features": 250
+    "num_features": 100
 }

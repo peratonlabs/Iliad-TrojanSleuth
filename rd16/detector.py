@@ -114,7 +114,7 @@ class Detector(AbstractDetector):
 
                 for i, model_dirpath in enumerate(model_path_list):
 
-                    with open(os.path.join(model_dirpath, "config.json")) as f:
+                    with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
                         config = json.load(f)
                     meta_arch = config['arch']
                     #print(meta_arch)
@@ -136,7 +136,7 @@ class Detector(AbstractDetector):
                     labels.append(int(label))
                 params = np.array(params).astype(np.float32)
                 labels = np.expand_dims(np.array(labels),-1)
-                print(params.shape, labels.shape)
+                #print(params.shape, labels.shape)
                 continue
                 #params = params[idx, :]
                 #labels = labels[idx]
@@ -157,12 +157,12 @@ class Detector(AbstractDetector):
                 #importance = np.argsort(clf.feature_importances_)[-100:]
                 importance = np.array(range(params.shape[1]))
                 importances.append(importance)
-            print(1/0)
+            #print(1/0)
             for i, model_dirpath in enumerate(model_path_list):
 
-                with open(os.path.join(model_dirpath, "model.info.json")) as f:
+                with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
                     config = json.load(f)
-                meta_arch = config['model']
+                meta_arch = config['arch']
                 if arch != meta_arch:
                     continue
                 model_filepath = os.path.join(model_dirpath, "model.pt")
@@ -171,7 +171,7 @@ class Detector(AbstractDetector):
                 model.to(device)
                 model.eval()
 
-                feature_vector = self.weight_analysis_configure(model, arch, size, importances, device)
+                feature_vector = self.weight_analysis_configure(model, arch, size, device)
                 if feature_vector == None:
                     continue
                 feature_vector = feature_vector.detach().cpu().numpy()
@@ -196,7 +196,7 @@ class Detector(AbstractDetector):
         sizes = []
 
         for model_dirpath in model_list:
-            with open(os.path.join(model_dirpath, "config.json")) as f:
+            with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
                 config = json.load(f)
             arch = config['arch']
             if arch in archs:
@@ -222,27 +222,25 @@ class Detector(AbstractDetector):
         return param
 
     def weight_analysis_configure(self, model, arch, size, device):
+        model_size = len(list(model.named_parameters()))
+        #print(model_size)
+        if model_size != size:
+            return None
         params = []
-        if arch != "BasicFCModel":
-            layer = torch.flatten(list(model.named_parameters())[-1][1])
-            params.append(layer[0])
-            params=torch.tensor(params)
-        else:
-            mapping = {5:3, 6:4, 7:5, 8:6, 9:7, 12:8, 13:9, 14:10, 15:11}
-            for counter, param in enumerate(model.named_parameters()):
-                #print(param[1].shape)
-                #if counter == len(importances):
-                #    break
-                #if 'weight' in param[0]:
-                layer = torch.flatten(param[1])
-                #print(layer.shape)
-                if counter not in mapping:
-                    continue
-                #importance_indices = importances[mapping[counter]]
-                weights = layer[:]
-                params.append(weights)
+        counter = 0
+        for param in model.named_parameters():
+            #if counter == len(importances):
+            #    break
+            #if 'weight' in param[0]:
+            layer = torch.flatten(param[1])
+            #importance_indices = importances[counter]
+            #counter +=1
+            weights = layer[:]
+            params.append(weights)
 
-            params = torch.cat((params), dim=0)
+        #if len(params) != size:
+        #    return None, 0
+        params = torch.cat((params), dim=0)
         return params
 
 
@@ -286,7 +284,7 @@ class Detector(AbstractDetector):
         clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
         clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
         eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm), ('lr', clf_lr)], voting='soft')
-        clf = eclf
+        clf = clf_rf
         #clf = CalibratedClassifierCV(clf, ensemble=False)
         clf.fit(X_train, y_train)
         print(arch)
@@ -369,31 +367,28 @@ class Detector(AbstractDetector):
         #self.inference_on_example_data(model, examples_dirpath)
         model_size = len(list(model.named_parameters()))
         #print(model_size)
-        #model_path_list = sorted([os.path.join(round_training_dataset_dirpath, "models", model) for model in os.listdir(os.path.join(round_training_dataset_dirpath, "models"))])
+        #model_path_list = sorted([os.path.join(round_training_dataset_dirpath, "models2", model) for model in os.listdir(os.path.join(round_training_dataset_dirpath, "models2"))])
         #archs, sizes = self.get_architecture_sizes(model_path_list)
-        #archs = ["BasicFCModel", "SimplifiedRLStarter"]
-        #sizes = [16, 18]
+        archs = ["FCModel", "CNNModel"]
+        sizes = [16, 14]
         
-        if model_size == 16:
-            arch = "BasicFCModel"
-        else:
-            arch = "SimplifiedRLStarter"
+        for arch_i in range(len(archs)):
 
+            arch = archs[arch_i]
+            size = sizes[arch_i]
 
-        clf = load(os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
-        #scaler = load(os.path.join(self.learned_parameters_dirpath, "scaler_"+arch+".joblib"))
-        #importances = load(os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib")).tolist()
-        overall_importances = load(os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch+".joblib"))
+            clf = load(os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
+            #scaler = load(os.path.join(self.learned_parameters_dirpath, "scaler_"+arch+".joblib"))
+            #importances = load(os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib")).tolist()
+            overall_importances = load(os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch+".joblib"))
 
-        features = self.weight_analysis_configure(model, arch, model_size, device)
-        import math
-        if features != None:
-            features = np.array(features.detach().cpu()).reshape(1,-1)
-            features = features[:,overall_importances]
-            #trojan_probability = clf.predict_proba(scaler.transform(features_full))[0][1]
-            trojan_probability = clf.predict_proba(features)[0][1]
-            #trojan_probability = np.tanh(3*(trojan_probability*2-1))/2+0.5
-            logging.info('Trojan Probability: {}'.format(trojan_probability))
+            features = self.weight_analysis_configure(model, arch, size, device)
+            import math
+            if features != None:
+                features = np.array(features.detach().cpu()).reshape(1,-1)
+                features = features[:,overall_importances]
+                trojan_probability = clf.predict_proba(features)[0][1]
+                logging.info('Trojan Probability: {}'.format(trojan_probability))
 
-            with open(result_filepath, 'w') as fh:
-                fh.write("{}".format(trojan_probability))
+                with open(result_filepath, 'w') as fh:
+                    fh.write("{}".format(trojan_probability))
