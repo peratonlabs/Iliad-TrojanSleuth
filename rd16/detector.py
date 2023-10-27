@@ -13,7 +13,7 @@ import pickle
 import numpy as np
 import random
 
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, BaggingClassifier, VotingClassifier
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, BaggingClassifier, VotingClassifier, GradientBoostingClassifier
 
 from utils.abstract import AbstractDetector
 from utils.model_utils import compute_action_from_trojai_rl_model
@@ -184,6 +184,8 @@ class Detector(AbstractDetector):
             #labels = np.expand_dims(np.array(labels),-1)
             print(features.shape, labels.shape)
             data = np.concatenate((features, labels), axis=1)
+            #dump(data, os.path.join("data_"+arch+".joblib"))
+            #data = load(os.path.join("data_"+arch+".joblib"))
 
             model, scaler, overall_importance = self.train_model(data, arch)
             dump(scaler, os.path.join(self.learned_parameters_dirpath, "scaler_"+arch+".joblib"))
@@ -248,54 +250,63 @@ class Detector(AbstractDetector):
 
         X = data[:,:-1].astype(np.float32)
         y = data[:,-1]
+        cutoff = int(X.shape[0]*0.75)
+        print(cutoff)
 
         sc = StandardScaler()
-        #clf = clf_lr.fit(sc.fit_transform(X), y)
         clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
         clf_svm = SVC(probability=True, kernel='rbf')
-        clf_lr = LogisticRegression()
-
-        #mif = dict()
-        #mif_list = []
-        #idx = np.random.choice(X.shape[0], size=X.shape[0], replace=False)
-        #X = X[idx, :]
-        #y = y[idx]
-        cutoff = int(X.shape[0]*0.75)
-        X_train = X[:cutoff,:]
-        #print(X_train.shape)
-        X_test = X[cutoff:,:]
-        #X_train = X[:cutoff,:]
-        #X_test = X[cutoff:,:]
-        y_train = y[:cutoff]
-        y_test = y[cutoff:]
-
-        clf = clf_rf.fit(X_train, y_train)
-        importance_full = np.argsort(clf.feature_importances_)
-        importance = importance_full[-1*self.num_features:]
-        X_train = X_train[:,importance]
-        #X_train = sc.fit_transform(X_train)
-        #X_train = scale(X_train, axis=1)
-        X_test = X_test[:,importance]
-        #X_test = sc.transform(X_test)
-        #X_test = scale(X_test, axis=1)
         parameters = {'gamma':[0.001,0.005,0.01,0.02], 'C':[0.1,1,10,100]}
-        #parameters = {'min_samples_split':[5,10,20,50], 'min_samples_leaf':[5,10]}
         clf_svm = GridSearchCV(clf_svm, parameters)
         clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_samples=0.83, bootstrap=False)
-        clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
+        clf_lr = LogisticRegression()
         eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm), ('lr', clf_lr)], voting='soft')
-        clf = clf_rf
-        #clf = CalibratedClassifierCV(clf, ensemble=False)
-        clf.fit(X_train, y_train)
-        print(arch)
-        #print(clf.score(X_train, y_train), roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]), log_loss(y_train, clf.predict_proba(X_train)[:,1]))
-        #print(clf.score(X_test, y_test), roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]), log_loss(y_test, clf.predict_proba(X_test)[:,1]))
-        print(self.custom_accuracy_function(clf, X_train, y_train), self.custom_scoring_function(clf, X_train, y_train), self.custom_loss_function(clf, X_train, y_train))
-        print(self.custom_accuracy_function(clf, X_test, y_test), self.custom_scoring_function(clf, X_test, y_test), self.custom_loss_function(clf, X_test, y_test))
+        clf_gb = GradientBoostingClassifier()
+        
+        #for train_size in [5*x for x in range(1,17)]:
+        train_size = 83
+        if True:
+            test_accs = []
+            test_ces = []
+            print("train size: ", train_size)
+            for i in range(10):
+                idx = np.random.choice(X.shape[0], size=X.shape[0], replace=False)
+                X = X[idx, :]
+                y = y[idx]
+                X_train = X[:train_size,:]
+                X_test = X[83:,:]
+                #print(X_train.shape, X_test.shape)
+                y_train = y[:train_size]
+                y_test = y[83:]
 
+                clf = clf_rf.fit(X_train, y_train)
+                importance_full = np.argsort(clf.feature_importances_)
+                importance = importance_full[-1*self.num_features:]
+                X_train = X_train[:,importance]
+                #X_train = sc.fit_transform(X_train)
+                #X_train = scale(X_train, axis=1)
+                X_test = X_test[:,importance]
+                #X_test = sc.transform(X_test)
+                #X_test = scale(X_test, axis=1)
+
+                clf = clf_gb
+                #clf = CalibratedClassifierCV(clf, ensemble=False)
+                clf.fit(X_train, y_train)
+                #print(arch)
+                #print(clf.score(X_train, y_train), roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]), log_loss(y_train, clf.predict_proba(X_train)[:,1]))
+                #print(clf.score(X_test, y_test), roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]), log_loss(y_test, clf.predict_proba(X_test)[:,1]))
+                #print(self.custom_accuracy_function(clf, X_train, y_train), self.custom_scoring_function(clf, X_train, y_train), self.custom_loss_function(clf, X_train, y_train))
+                #print(self.custom_accuracy_function(clf, X_test, y_test), self.custom_scoring_function(clf, X_test, y_test), self.custom_loss_function(clf, X_test, y_test))
+                try:
+                    test_accs.append(self.custom_scoring_function(clf, X_test, y_test))
+                    test_ces.append(self.custom_loss_function(clf, X_test, y_test))
+                except:
+                    print("Failed: ", train_size, i)
+            print(arch, np.mean(test_accs), np.mean(test_ces))
+        #print(1/0)
         X = X[:,importance]
         clf.fit(X, y)
-        print(clf.score(X,y), self.custom_loss_function(clf, X, y))
+        #print(clf.score(X,y), self.custom_loss_function(clf, X, y))
 
         return clf, sc, importance
 
