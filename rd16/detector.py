@@ -14,6 +14,8 @@ import numpy as np
 import random
 
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier, BaggingClassifier, VotingClassifier, GradientBoostingClassifier
+import xgboost as xgb
+from sklearn import linear_model
 
 from utils.abstract import AbstractDetector
 from utils.model_utils import compute_action_from_trojai_rl_model
@@ -262,6 +264,8 @@ class Detector(AbstractDetector):
         clf_lr = LogisticRegression()
         eclf = VotingClassifier(estimators=[('rf', clf_rf), ('svm', clf_svm), ('lr', clf_lr)], voting='soft')
         clf_gb = GradientBoostingClassifier()
+        clf_lasso = linear_model.Lasso()
+        clf_xg = xgb.XGBClassifier(tree_method="hist")
         
         #for train_size in [5*x for x in range(1,17)]:
         train_size = 83
@@ -282,6 +286,10 @@ class Detector(AbstractDetector):
                 clf = clf_rf.fit(X_train, y_train)
                 importance_full = np.argsort(clf.feature_importances_)
                 importance = importance_full[-1*self.num_features:]
+                #clf = clf_lasso.fit(X_train, y_train)
+                #lasso_coef = np.abs(clf.coef_)
+                #
+                # importance = np.argsort(lasso_coef)[-1*self.num_features:]
                 X_train = X_train[:,importance]
                 #X_train = sc.fit_transform(X_train)
                 #X_train = scale(X_train, axis=1)
@@ -289,9 +297,10 @@ class Detector(AbstractDetector):
                 #X_test = sc.transform(X_test)
                 #X_test = scale(X_test, axis=1)
 
-                clf = clf_gb
+                clf = clf_xg
                 #clf = CalibratedClassifierCV(clf, ensemble=False)
                 clf.fit(X_train, y_train)
+                self.custom_scoring_function(clf, X_test, y_test)
                 #print(arch)
                 #print(clf.score(X_train, y_train), roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]), log_loss(y_train, clf.predict_proba(X_train)[:,1]))
                 #print(clf.score(X_test, y_test), roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]), log_loss(y_test, clf.predict_proba(X_test)[:,1]))
@@ -320,8 +329,8 @@ class Detector(AbstractDetector):
         return log_loss(y, self.clip(estimator.predict_proba(X)[:,1]))
 
     def clip(self, p):
-        p[p < 0.3] = 0.001
-        p[p > 0.7] = 0.999
+        #p[p < 0.3] = 0.001
+        #p[p > 0.7] = 0.999
         return p
 
     def inference_on_example_data(self, model, examples_dirpath, config_dict):

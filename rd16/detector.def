@@ -1,0 +1,22 @@
+Bootstrap: docker
+From: python:3.9-bullseye
+
+%files
+    ./detector.py /
+    ./entrypoint.py /
+    ./utils /
+    ./metaparameters.json /
+    ./metaparameters_schema.json /
+    ./learned_parameters /
+
+%post
+    pip install --upgrade pip
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+    pip install gym gymnasium minigrid jsonschema jsonpickle scikit-learn opencv-python xgboost
+    chmod 755 /*.py
+    chmod -R 755 /utils
+    chmod 755 /*.json
+    chmod -R 755 /learned_parameters
+
+%runscript
+    exec python3 /entrypoint.py "$@"
