@@ -5,8 +5,8 @@ import pickle
 from os import listdir, makedirs
 from os.path import join, exists, basename
 
-import numpy as np
 import torch
+import numpy as np
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler, scale
 from sklearn.calibration import CalibratedClassifierCV
