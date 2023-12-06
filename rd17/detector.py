@@ -285,9 +285,9 @@ class Detector(AbstractDetector):
         #self.inference_on_example_data(model, examples_dirpath)
         bias1 = model_pt.fc4._parameters['bias'][1].detach().item()
         if bias1 > 0.35:
-            trojan_probability = 0.75
+            trojan_probability = '0.75'
         else:
-            trojan_probability = 0.25
+            trojan_probability = '0.25'
         #loss_object = torch.nn.CrossEntropyLoss()
         # for _ in range(num_perturb):
         #     perturbation = torch.FloatTensor(np.random.normal(0,1,(1,991))).to(device)# + sample_feature_vectors[j%len(sample_feature_vectors)]
