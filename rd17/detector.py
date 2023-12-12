@@ -284,7 +284,7 @@ class Detector(AbstractDetector):
         model_pt = model.model.to(device)
         #self.inference_on_example_data(model, examples_dirpath)
         bias1 = model_pt.fc4._parameters['bias'][1].detach().item()
-        if bias1 < -0.1:
+        if bias1 < -0.2:
             trojan_probability = '0.75'
         else:
             trojan_probability = '0.25'

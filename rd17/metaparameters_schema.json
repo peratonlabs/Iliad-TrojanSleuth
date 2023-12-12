@@ -5,7 +5,7 @@
   "technique_description": "Classifier based on final bias term.",
   "technique_changes": "Changed threshold to -0.2",
   "technique_type": ["Weight Analysis"],
-  "commit_id": "",
+  "commit_id": "0eb99813ca30f41dcf52a18f10ce35604891e01c",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd17",
   "required": [],
   "additionalProperties": false,
