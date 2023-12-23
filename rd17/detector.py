@@ -289,7 +289,7 @@ class Detector(AbstractDetector):
         bias1 = model_pt['fc4.bias'][1].detach().item()
         #print(bias0, bias1)
         #print(1/0)
-        if bias0 > 0.0 and bias1 > 0.0:
+        if bias0 > 0.0 and bias1 < 0.0:
             trojan_probability = '0.75'
         else:
             trojan_probability = '0.25'
