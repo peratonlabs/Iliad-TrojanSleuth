@@ -5,8 +5,8 @@ import pickle
 from os import listdir, makedirs
 from os.path import join, exists, basename
 
-import numpy as np
 import torch
+import numpy as np
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler, scale
 from sklearn.calibration import CalibratedClassifierCV
@@ -273,7 +273,7 @@ class Detector(AbstractDetector):
             round_training_dataset_dirpath:
         """
         
-        device = 'cpu'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         gradient_data_points = []
         labels = []
@@ -289,7 +289,7 @@ class Detector(AbstractDetector):
         bias1 = model_pt['fc4.bias'][1].detach().item()
         #print(bias0, bias1)
         #print(1/0)
-        if bias0 > 0.0 and bias1 < 0.0:
+        if bias0 < 0.0 and bias1 > 0.0:
             trojan_probability = '0.75'
         else:
             trojan_probability = '0.25'
