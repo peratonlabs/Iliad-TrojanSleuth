@@ -105,92 +105,221 @@ class Detector(AbstractDetector):
             labels = []
             #idx = 0
             #idx = np.random.choice(train_sizes[arch_i], size=train_sizes[arch_i], replace=False)
+            method = "hist"
+            if method == "bias":
 
-            for parameter_index in range(size-2):
-                params = []
-                labels = []
-                #print(parameter_index)
+                for parameter_index in range(1):#size-2):
+                    params = []
+                    labels = []
+                    #print(parameter_index)
+                    biases = [[],[]]
+                    weights = [[],[]]
+                    total = correct = 0
 
+                    for i, model_dirpath in enumerate(model_path_list):
+
+                        with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                            config = json.load(f)
+                        meta_arch = config['model_architecture']
+                        #print(meta_arch)
+                        if arch != meta_arch:
+                            continue
+                        model_filepath = os.path.join(model_dirpath, "model.pt")
+                        model, model_repr, model_class = load_model(model_filepath)
+                        #print(1/0)
+                        model.to(device)
+                        model.eval()
+                        #print(model)
+                        label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                        last_layer = model.qa_outputs._parameters
+                        #print(model)
+                        #print(last_layer['weight'].shape, last_layer['bias'].shape)
+                        #print(torch.mean(last_layer['weight']).detach(), torch.std(last_layer['weight']).detach(), last_layer['bias'].detach(),label)
+                        if label==True:
+                            biases[1].append(last_layer['bias'][1].detach().item())
+                        if label==False:
+                            biases[0].append(last_layer['bias'][1].detach().item())
+                        # if label==True:
+                        #     weights[1].append(torch.min(last_layer['weight'].detach()).item())
+                        # if label==False:
+                        #     weights[0].append(torch.min(last_layer['weight'].detach()).item())
+                            
+                        if label==True and last_layer['bias'][1].detach() >= 0 and last_layer['bias'][0].detach() >= 0:
+                            correct += 1
+                        if label==False and last_layer['bias'][1].detach() < 0 or last_layer['bias'][0].detach() < 0:
+                            correct += 1
+                        total += 1
+                        #print(last_layer['bias'][0].detach().item(), last_layer['bias'][1].detach().item())
+                    #print(0, np.mean(weights[0]))
+                    #print(1, np.mean(weights[1]))
+                    
+                    print(correct, total, correct/total)
+                    #print(0, np.mean(biases[0]))
+                    #print(1, np.mean(biases[1]))
+                    #print(1/0)#break#
+                continue
+            if method == "params":
+                for parameter_index in range(size-2):
+                    params = []
+                    labels = []
+                    for i, model_dirpath in enumerate(model_path_list):
+
+                        with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                            config = json.load(f)
+                        meta_arch = config['model_architecture']
+                        #print(meta_arch)
+                        if arch != meta_arch:
+                            continue
+                        model_filepath = os.path.join(model_dirpath, "model.pt")
+                        model, model_repr, model_class = load_model(model_filepath)
+                        #print(1/0)
+                        model.to(device)
+                        model.eval()
+                        #print(model)
+                        param = self.get_param(model, arch, parameter_index, device)
+                        if param == None:
+                            continue
+                        #print(i)
+                        params.append(param.detach().cpu().numpy())
+
+                        label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                        labels.append(int(label))
+                    params = np.array(params).astype(np.float32)
+                    labels = np.expand_dims(np.array(labels),-1)
+                    #print(params.shape, labels.shape)
+                    #print(1/0)
+                    #params = params[idx, :]
+                    #labels = labels[idx]
+                    if params.shape[1] > 3000000:
+                        avg_feats = np.mean(params, axis=0)
+                        importance = np.argsort(np.abs(avg_feats))[-100:]
+                        #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
+                        importances.append(importance)
+
+                    else:
+                        cutoff = int(params.shape[0]*0.75)
+                        X_train = params[:cutoff,:]
+                        X_test = params[cutoff:,:]
+                        y_train = labels[:cutoff]
+                        y_test = labels[cutoff:]
+                        clf = clf_rf.fit(X_train, y_train)
+
+                        importance = np.argsort(clf.feature_importances_)[-100:]
+                        #importance = np.array(range(params.shape[1]))
+                        importances.append(importance)
+                    print("parameter_index: ", parameter_index)
+                #dump(np.array(importances), os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib"))
+                #print(1/0)
                 for i, model_dirpath in enumerate(model_path_list):
 
                     with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
                         config = json.load(f)
                     meta_arch = config['model_architecture']
-                    #print(meta_arch)
                     if arch != meta_arch:
                         continue
                     model_filepath = os.path.join(model_dirpath, "model.pt")
+                    #model = torch.load(model_filepath)
                     model, model_repr, model_class = load_model(model_filepath)
-                    #print(1/0)
                     model.to(device)
                     model.eval()
 
-                    param = self.get_param(model, arch, parameter_index, device)
-                    if param == None:
+                    feature_vector = self.weight_analysis_configure(model, arch, size, importances, device)
+                    if feature_vector == None:
                         continue
-                    #print(i)
-                    params.append(param.detach().cpu().numpy())
-
-                    label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
-                    labels.append(int(label))
-                params = np.array(params).astype(np.float32)
-                labels = np.expand_dims(np.array(labels),-1)
-                #print(params.shape, labels.shape)
-                #print(1/0)
-                #params = params[idx, :]
+                    feature_vector = feature_vector.detach().cpu().numpy()
+                    features.append(feature_vector)
+            
+                features = np.array(features)
+                #features = features[idx,:]
                 #labels = labels[idx]
-                if params.shape[1] > 3000000:
-                    avg_feats = np.mean(params, axis=0)
-                    importance = np.argsort(np.abs(avg_feats))[-100:]
-                    #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
-                    importances.append(importance)
-
-                else:
-                    cutoff = int(params.shape[0]*0.75)
-                    X_train = params[:cutoff,:]
-                    X_test = params[cutoff:,:]
-                    y_train = labels[:cutoff]
-                    y_test = labels[cutoff:]
-                    clf = clf_rf.fit(X_train, y_train)
-
-                    importance = np.argsort(clf.feature_importances_)[-100:]
-                    #importance = np.array(range(params.shape[1]))
-                    importances.append(importance)
-                print("parameter_index: ", parameter_index)
-            dump(np.array(importances), os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib"))
-            #print(1/0)
-            for i, model_dirpath in enumerate(model_path_list):
-
-                with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
-                    config = json.load(f)
-                meta_arch = config['model_architecture']
-                if arch != meta_arch:
-                    continue
-                model_filepath = os.path.join(model_dirpath, "model.pt")
-                #model = torch.load(model_filepath)
-                model, model_repr, model_class = load_model(model_filepath)
-                model.to(device)
-                model.eval()
-
-                feature_vector = self.weight_analysis_configure(model, arch, size, importances, device)
-                if feature_vector == None:
-                    continue
-                feature_vector = feature_vector.detach().cpu().numpy()
-                features.append(feature_vector)
+                labels = np.expand_dims(np.array(labels),-1)
+                print(features.shape, labels.shape)
+                data = np.concatenate((features, labels), axis=1)
+                #dump(data, os.path.join("data_"+arch_name+".joblib"))
                 
-                
-            features = np.array(features)
-            #features = features[idx,:]
-            #labels = labels[idx]
-            #labels = np.expand_dims(np.array(labels),-1)
-            print(features.shape, labels.shape)
-            data = np.concatenate((features, labels), axis=1)
-            #dump(data, os.path.join("data_"+arch_name+".joblib"))
+            if method == "hist":
+                for parameter_index in range(size-2):
+                    params = []
+                    labels = []
+                    for i, model_dirpath in enumerate(model_path_list):
+                        #if i > 5: break
+                        with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                            config = json.load(f)
+                        meta_arch = config['model_architecture']
+                        #print(meta_arch)
+                        if arch != meta_arch:
+                            continue
+                        model_filepath = os.path.join(model_dirpath, "model.pt")
+                        model, model_repr, model_class = load_model(model_filepath)
+                        #print(1/0)
+                        model.to(device)
+                        model.eval()
+                        #print(model)
+                        label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                        param = self.get_param(model, arch, parameter_index, device)
+                        if param == None:
+                            continue
+                        #print(i)
+                        params.append(param.detach().cpu().numpy())
+
+                        label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                        labels.append(int(label))
+                    params = np.array(params).astype(np.float32)
+                    labels = np.expand_dims(np.array(labels),-1)
+                    #print(params.shape, labels.shape)
+                    #print(1/0)
+                    #params = params[idx, :]
+                    #labels = labels[idx]
+                    if params.shape[1] > 3000000:
+                        avg_feats = np.mean(params, axis=0)
+                        importance = np.argsort(np.abs(avg_feats))[-100:]
+                        #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
+                        importances.append(importance)
+
+                    else:
+                        cutoff = int(params.shape[0]*0.75)
+                        X_train = params[:cutoff,:]
+                        X_test = params[cutoff:,:]
+                        y_train = labels[:cutoff]
+                        y_test = labels[cutoff:]
+                        clf = clf_rf.fit(X_train, y_train)
+
+                        importance = np.argsort(clf.feature_importances_)#[-100:]
+                        #importance = np.array(range(params.shape[1]))
+                        importances.append(importance)
+                    print("parameter_index: ", parameter_index)
+                for i, model_dirpath in enumerate(model_path_list):
+                    #if i > 5: break
+                    with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                        config = json.load(f)
+                    meta_arch = config['model_architecture']
+                    if arch != meta_arch:
+                        continue
+                    model_filepath = os.path.join(model_dirpath, "model.pt")
+                    #model = torch.load(model_filepath)
+                    model, model_repr, model_class = load_model(model_filepath)
+                    model.to(device)
+                    model.eval()
+
+                    feature_vector = self.weight_analysis_configure(model, arch, size, importances, device)
+                    if feature_vector == None:
+                        continue
+                    feature_vector = feature_vector.detach().cpu().numpy()
+                    features.append(feature_vector)
+            
+                features = np.array(features)
+                #features = np.array(features)
+                #features = features[idx,:]
+                #labels = labels[idx]
+                #labels = np.expand_dims(np.array(labels),-1)
+                print(features.shape, labels.shape)
+                data2 = np.concatenate((features, labels), axis=1)
+
             #continue
-            #data = load(os.path.join("data_"+arch_name+".joblib"))
+            data = load(os.path.join("data_"+arch_name+".joblib"))
             #data2 = load(os.path.join("data_weights/data_"+arch_name+".joblib"))
             #data = np.concatenate((data[:,:-1], data2), axis=1)
-            model, scaler, overall_importance = self.train_model(data, arch)
+            model, scaler, overall_importance = self.train_model(data, data2, arch)
 
             logging.info("Saving model...")
             dump(scaler, os.path.join(self.learned_parameters_dirpath, "scaler_"+arch_name+".joblib"))
@@ -252,19 +381,52 @@ class Detector(AbstractDetector):
         #    return None, 0
         params = torch.cat((params), dim=0)
         return params
+    
+    def get_hist_features(self, model, arch, size, device):
+        model_size = len(list(model.named_parameters()))
+        #print(model_size)
+        if model_size != size:
+            return None
+        params = []
+        for param in model.named_parameters():
+            layer = torch.flatten(param[1])
+            params.append(layer)
+
+        #if len(params) != size:
+        #    return None, 0
+        params = torch.cat((params), dim=0)
+        return params.detach().cpu().numpy()
 
 
-    def train_model(self, data, arch):
+    def train_model(self, data, data2, arch):
 
         X = data[:,:-1].astype(np.float32)
         y = data[:,-1]
+        
+        X2 = data2[:,:-1].astype(np.float32)
+        y2 = data2[:,-1]
+        
+        print(y[:10], y2[:10])
 
         sc = StandardScaler()
         #clf = clf_lr.fit(sc.fit_transform(X), y)
         clf_rf = RandomForestClassifier(n_estimators=self.random_forest_num_trees)
         clf_svm = SVC(probability=True, kernel='rbf')
         clf_lr = LogisticRegression()
-
+        
+        cols = []
+        min_val = np.min(X2)
+        max_val = np.max(X2)
+        print(min_val, max_val)
+        sc = np.array([min_val, max_val])
+        space = (max_val - min_val) / 20
+        vals = np.arange(min_val, max_val+space, space)
+        for i in range(len(vals)-1):
+            cols.append(np.expand_dims(np.sum(np.logical_and(X2 >= vals[i], X2 < vals[i+1]),axis=1),-1))
+        X2 = np.concatenate((cols[0], cols[1], cols[2], cols[3], cols[4], cols[5], cols[6], cols[7], cols[8], cols[9], cols[10], cols[11], cols[12], cols[13], cols[14], cols[15], 
+                            cols[16], cols[17], cols[18], cols[19]),axis=1)
+        print(X.shape, X2.shape)
+        #print(1/0)
         #mif = dict()
         #mif_list = []
         #idx = np.random.choice(X.shape[0], size=X.shape[0], replace=False)
@@ -278,6 +440,8 @@ class Detector(AbstractDetector):
         #X_test = X[cutoff:,:]
         y_train = y[:cutoff]
         y_test = y[cutoff:]
+        X2_train = X2[:cutoff,:]
+        X2_test = X2[cutoff:,:]
 
         clf = clf_rf.fit(X_train, y_train)
         importance_full = np.argsort(clf.feature_importances_)
@@ -286,6 +450,10 @@ class Detector(AbstractDetector):
         #X_train = sc.fit_transform(X_train)
         #X_train = scale(X_train, axis=1)
         X_test = X_test[:,importance]
+        
+        X_train = np.concatenate((X_train, X2_train),axis=1)
+        X_test = np.concatenate((X_test, X2_test),axis=1)
+        
         #X_test = sc.transform(X_test)
         #X_test = scale(X_test, axis=1)
         parameters = {'gamma':[0.001,0.005,0.01,0.02], 'C':[0.1,1,10,100]}
@@ -304,6 +472,7 @@ class Detector(AbstractDetector):
         print(self.custom_accuracy_function(clf, X_test, y_test), self.custom_scoring_function(clf, X_test, y_test), self.custom_loss_function(clf, X_test, y_test))
 
         X = X[:,importance]
+        X = np.concatenate((X, X2),axis=1)
         clf.fit(X, y)
         print(clf.score(X,y), self.custom_loss_function(clf, X, y))
 
@@ -449,6 +618,19 @@ class Detector(AbstractDetector):
             if features != None:
                 features = np.array(features.detach().cpu()).reshape(1,-1)
                 features = features[:,overall_importances]
+                features = np.array(features)
+                hist_features = np.array([self.get_hist_features(model, arch, size, device)])
+                cols = []
+                min_val = scaler[0]
+                max_val = scaler[1]
+                space = (max_val - min_val) / 20
+                vals = np.arange(min_val, max_val+space, space)
+                for i in range(len(vals)-1):
+                    cols.append(np.expand_dims(np.sum(np.logical_and(hist_features >= vals[i], hist_features < vals[i+1])),-1))
+                features2 = np.concatenate((cols[0], cols[1], cols[2], cols[3], cols[4], cols[5], cols[6], cols[7], cols[8], cols[9], cols[10], cols[11], cols[12], cols[13], cols[14], cols[15], 
+                                    cols[16], cols[17], cols[18], cols[19]))
+                features2 = np.expand_dims(features2, 0)
+                features = np.concatenate((features, features2), axis=1)
                 trojan_probability = clf.predict_proba(features)[0][1]
                 logging.info('Trojan Probability: {}'.format(trojan_probability))
 
