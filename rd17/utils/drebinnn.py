@@ -148,7 +148,7 @@ class DrebinNN(object):
 
     def predict(self, X):
         self.model.eval()
-        X = torch.from_numpy(X).float().to(self.device)
+        X = X.float().to(self.device)
         softmax = nn.Softmax(dim=1)
         return softmax(self.model(X)).cpu()
 
@@ -200,7 +200,7 @@ class DrebinNN(object):
         if not file_name.endswith('.pt'):
             file_name = file_name + '.pt'
         self.model.load_state_dict(torch.load(
-            os.path.join(save_path, file_name)))
+            os.path.join(save_path, file_name), torch.device('cpu')))
         self.model.eval()
 
     def merge_default_model_cfg(self):
