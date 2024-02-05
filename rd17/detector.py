@@ -126,8 +126,8 @@ class Detector(AbstractDetector):
                 gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,feature_size*2)
                 gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
                 gradient_std = torch.std(gradients, dim=0).cpu().numpy()
-                gradients = np.concatenate((gradient_mean, gradient_std))
-                gradient_data_points.append(gradients.reshape(feature_size*2*2))
+                gradients = gradient_std#np.concatenate((gradient_mean, gradient_std))
+                gradient_data_points.append(gradients.reshape(feature_size*2))#*2))
 
             results = np.array(gradient_data_points)
             np_labels = np.expand_dims(np.array(labels),-1)
@@ -557,8 +557,8 @@ class Detector(AbstractDetector):
         gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,feature_size*2)
         gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
         gradient_std = torch.std(gradients, dim=0).cpu().numpy()
-        gradients = np.concatenate((gradient_mean, gradient_std))
-        gradient_data_points.append(gradients.reshape(feature_size*2*2))
+        gradients = gradient_std#np.concatenate((gradient_mean, gradient_std))
+        gradient_data_points.append(gradients.reshape(feature_size*2))#*2))
 
         results = np.array(gradient_data_points)
         results = scale(results, axis=1)
