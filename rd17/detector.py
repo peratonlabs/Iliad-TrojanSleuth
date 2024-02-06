@@ -126,8 +126,8 @@ class Detector(AbstractDetector):
                 gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,feature_size*2)
                 gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
                 gradient_std = torch.std(gradients, dim=0).cpu().numpy()
-                gradients = gradient_std#np.concatenate((gradient_mean, gradient_std))
-                gradient_data_points.append(gradients.reshape(feature_size*2))#*2))
+                gradients = np.concatenate((gradient_mean, gradient_std))
+                gradient_data_points.append(gradients.reshape(feature_size*2*2))
 
             results = np.array(gradient_data_points)
             np_labels = np.expand_dims(np.array(labels),-1)
@@ -379,7 +379,7 @@ class Detector(AbstractDetector):
         clf_svm = SVC(probability=True, kernel='rbf')
         parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.001,0.01,0.1,1,10]}
         clf_svm = GridSearchCV(clf_svm, parameters)
-        #clf_svm = BaggingClassifier(estimator=clf_svm, n_estimators=6, max_features=0.83, bootstrap=False)
+        clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_features=0.83, bootstrap=False)
         clf_rf = RandomForestClassifier(n_estimators=500)
         clf_svm = CalibratedClassifierCV(clf_svm, ensemble=False)
         clf_lr = LogisticRegression()
@@ -557,8 +557,8 @@ class Detector(AbstractDetector):
         gradients = torch.stack(gradient_list, dim=0).reshape(num_perturb,feature_size*2)
         gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
         gradient_std = torch.std(gradients, dim=0).cpu().numpy()
-        gradients = gradient_std#np.concatenate((gradient_mean, gradient_std))
-        gradient_data_points.append(gradients.reshape(feature_size*2))#*2))
+        gradients = np.concatenate((gradient_mean, gradient_std))
+        gradient_data_points.append(gradients.reshape(feature_size*2*2))
 
         results = np.array(gradient_data_points)
         results = scale(results, axis=1)
