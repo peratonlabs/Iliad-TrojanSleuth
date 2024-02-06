@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Peraton Trojan Detection Container.",
+  "technique": "Jacobian classifier",
+  "technique_description": "Train a classifier on means and standard deviations of jacobians of the logits with respect to random noise input.",
+  "technique_changes": "Initial Submission",
+  "technique_type": ["Jacobian Inspection"],
+  "commit_id": "",
+  "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd18",
+  "required": [],
+  "additionalProperties": false,
+  "type": "object",
+  "properties": {
+	"train_num_perturbations":  {
+		"description": "Number of random noise perturbations to apply. Each will have a gradient calculated, which is averaged into a feature vector.",
+		"type": "integer",
+		"minimum": 1,
+		"maximum": 1000,
+		"suggested_minimum": 10,
+		"suggested_maximum": 1000
+	},
+	"infer_num_perturbations":  {
+		"description": "Number of random noise perturbations to apply. Each will have a gradient calculated, which is averaged into a feature vector.",
+		"type": "integer",
+		"minimum": 1,
+		"maximum": 1000,
+		"suggested_minimum": 10,
+		"suggested_maximum": 1000
+	}
+  }
+}
