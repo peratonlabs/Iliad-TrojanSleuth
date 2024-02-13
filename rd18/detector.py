@@ -24,6 +24,7 @@ from sklearn.ensemble import RandomForestClassifier, VotingClassifier, RandomFor
 from sklearn.svm import SVC
 
 from tqdm import tqdm
+import joblib
 
 from utils.abstract import AbstractDetector
 from utils.flatten import flatten_model, flatten_models
@@ -95,60 +96,270 @@ class Detector(AbstractDetector):
         # List all available model
         model_path_list = sorted([join(models_dirpath, model) for model in listdir(models_dirpath)])
         logging.info(f"Loading %d models...", len(model_path_list))
+        
+        method = "wa"
+        if method == "jacobian":
 
-        gradient_data_points = []
-        labels = []
+            gradient_data_points = []
+            labels = []
 
-        for i, model in enumerate(model_path_list):
-            label = np.loadtxt(join(model, 'ground_truth.csv'), dtype=bool)
-            labels.append(int(label))
-            model_pt, model_repr, model_class = load_model(join(model, "model.pt"))#.to(device)
-            gradient_list = []
-            #model_pt = torch.load(join(model_dirpath,"model.pt"), map_location=torch.device('cpu'))
-            #print(1/0)
-            #model_pt.to(device)
-            #model_pt.eval()
-            #model_pt = torch.load(, map_location=torch.device('cpu')).to(device)
-            feature_size = 784
-            for j in range(self.train_num_perturbations):
-                perturbation = torch.FloatTensor(np.random.normal(0,1,(1,feature_size))).to(device)
-                perturbation.requires_grad = True
-                logits = model_pt.predict(perturbation)
-                #print(logits)
-                gradient0 = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
-                                                grad_outputs=torch.ones(logits[0][1].size()), 
-                                                only_inputs=True, retain_graph=True)[0][0]
+            for i, model in enumerate(model_path_list):
+                label = np.loadtxt(join(model, 'ground_truth.csv'), dtype=bool)
+                labels.append(int(label))
+                model_pt, model_repr, model_class = load_model(join(model, "model.pt"))#.to(device)
+                gradient_list = []
+                #model_pt = torch.load(join(model_dirpath,"model.pt"), map_location=torch.device('cpu'))
+                #print(1/0)
+                #model_pt.to(device)
+                #model_pt.eval()
+                #model_pt = torch.load(, map_location=torch.device('cpu')).to(device)
+                feature_size = 784
+                for j in range(self.train_num_perturbations):
+                    perturbation = torch.FloatTensor(np.random.normal(0,1,(1,feature_size))).to(device)
+                    perturbation.requires_grad = True
+                    logits = model_pt.predict(perturbation)
+                    #print(logits)
+                    gradient0 = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
+                                                    grad_outputs=torch.ones(logits[0][1].size()), 
+                                                    only_inputs=True, retain_graph=True)[0][0]
 
-                gradient1 = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
-                                grad_outputs=torch.ones(logits[0][0].size()), 
-                                only_inputs=True, retain_graph=True)[0][0]
+                    gradient1 = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
+                                    grad_outputs=torch.ones(logits[0][0].size()), 
+                                    only_inputs=True, retain_graph=True)[0][0]
 
-                gradient = torch.cat((gradient0, gradient1), axis=0)
-                #print(gradient.shape)
-                gradient_list.append(gradient)
-                #model_pt.zero_grad()
-            gradients = torch.stack(gradient_list, dim=0).reshape(self.train_num_perturbations,feature_size*2)
-            gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
-            gradient_std = torch.std(gradients, dim=0).cpu().numpy()
-            gradients = np.concatenate((gradient_mean, gradient_std))
-            gradient_data_points.append(gradients.reshape(feature_size*2*2))
+                    gradient = torch.cat((gradient0, gradient1), axis=0)
+                    #print(gradient.shape)
+                    gradient_list.append(gradient)
+                    #model_pt.zero_grad()
+                gradients = torch.stack(gradient_list, dim=0).reshape(self.train_num_perturbations,feature_size*2)
+                gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
+                gradient_std = torch.std(gradients, dim=0).cpu().numpy()
+                gradients = np.concatenate((gradient_mean, gradient_std))
+                gradient_data_points.append(gradients.reshape(feature_size*2*2))
 
-        results = np.array(gradient_data_points)
-        np_labels = np.expand_dims(np.array(labels),-1)
-        print(results.shape, np_labels.shape)
-        results = np.concatenate((results, np_labels), axis=1)
+            results = np.array(gradient_data_points)
+            np_labels = np.expand_dims(np.array(labels),-1)
+            print(results.shape, np_labels.shape)
+            results = np.concatenate((results, np_labels), axis=1)
 
-        logging.info("Training classifier...")
-        model = self.train_model(results)
+            logging.info("Training classifier...")
+            model = self.train_jacobian_model(results)
+            logging.info("Saving classifier and parameters...")
+            with open(join(self.learned_parameters_dirpath, f"clf.joblib"), "wb") as fp:
+                pickle.dump(model, fp)
+        else:
+            archs, sizes = ["ResNet18", "ResNet34"], [62, 110]#self.get_architecture_sizes(model_path_list)
+            clf_rf = RandomForestClassifier(n_estimators=500)
+            for arch_i in range(len(archs)):
 
-        logging.info("Saving classifier and parameters...")
-        with open(join(self.learned_parameters_dirpath, "clf.joblib"), "wb") as fp:
-            pickle.dump(model, fp)
+                arch = archs[arch_i]
+                arch_name = arch#.split("/")[1]
+                #if "tinyroberta" not in arch: continue
+                size = sizes[arch_i]
+                #print(arch)
+                importances = []
+                features = []
+                labels = []
+                #idx = 0
+                #idx = np.random.choice(train_sizes[arch_i], size=train_sizes[arch_i], replace=False)
+                
+                for parameter_index in range(size-2):
+                    params = []
+                    labels = []
+                    for i, model_dirpath in enumerate(model_path_list):
+
+                        with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                            config = json.load(f)
+                        meta_arch = config['cnn_type']
+                        #print(meta_arch)
+                        if arch != meta_arch:
+                            continue
+                        model_filepath = os.path.join(model_dirpath, "model.pt")
+                        model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+                        #print(1/0)
+                        # model.to(device)
+                        # model.eval()
+                        #print(model)
+                        param = self.get_param(model_pt.model, arch, parameter_index, device)
+                        if param == None:
+                            continue
+                        #print(i)
+                        params.append(param.detach().cpu().numpy())
+
+                        label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                        labels.append(int(label))
+                    params = np.array(params).astype(np.float32)
+                    labels = np.expand_dims(np.array(labels),-1)
+                    #print(params.shape, labels.shape)
+                    #print(1/0)
+                    #params = params[idx, :]
+                    #labels = labels[idx]
+                    if params.shape[1] > 3000000:
+                        avg_feats = np.mean(params, axis=0)
+                        importance = np.argsort(np.abs(avg_feats))[-100:]
+                        #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
+                        importances.append(importance)
+
+                    else:
+                        cutoff = int(params.shape[0]*0.75)
+                        X_train = params[:cutoff,:]
+                        X_test = params[cutoff:,:]
+                        y_train = labels[:cutoff]
+                        y_test = labels[cutoff:]
+                        clf = clf_rf.fit(X_train, y_train)
+
+                        importance = np.argsort(clf.feature_importances_)[-100:]
+                        #importance = np.array(range(params.shape[1]))
+                        importances.append(importance)
+                    print("parameter_index: ", parameter_index)
+                #dump(np.array(importances), os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib"))
+                #print(1/0)
+                for i, model_dirpath in enumerate(model_path_list):
+
+                    with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                        config = json.load(f)
+                    meta_arch = config['cnn_type']
+                    if arch != meta_arch:
+                        continue
+                    model_filepath = os.path.join(model_dirpath, "model.pt")
+                    model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+
+                    feature_vector = self.weight_analysis_configure(model_pt.model, arch, size, importances, device)
+                    if feature_vector == None:
+                        continue
+                    feature_vector = feature_vector.detach().cpu().numpy()
+                    features.append(feature_vector)
+            
+                features = np.array(features)
+                #features = features[idx,:]
+                #labels = labels[idx]
+                #labels = np.expand_dims(np.array(labels),-1)
+                print(features.shape, labels.shape)
+                data = np.concatenate((features, labels), axis=1)
+                joblib.dump(data, os.path.join("data_"+arch_name+".joblib"))
+                #data = joblib.load(os.path.join("data_"+arch_name+".joblib"))
+                logging.info("Training classifier...")
+                model, overall_importance = self.train_wa_model(data)
+                logging.info("Saving classifier and parameters...")
+                joblib.dump(model, os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
+                joblib.dump(importances, os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib"))
+                joblib.dump(overall_importance, os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch+".joblib"))
 
         self.write_metaparameters()
         logging.info("Configuration done!")
         
-    def train_model(self, results):
+    def get_architecture_sizes(self, model_list):
+        archs = []
+        sizes = []
+
+        for model_dirpath in model_list:
+            with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                config = json.load(f)
+            arch = config['cnn_type']
+            if arch in archs:
+                continue
+
+            model_filepath = os.path.join(model_dirpath, "model.pt")
+            model, model_repr, model_class = load_model(model_filepath)
+
+            size = len(list(model.named_parameters()))
+
+            archs.append(arch)
+            sizes.append(size)
+
+        return archs, sizes
+
+    def get_param(self, model, arch, parameter_index, device):
+        params = []
+        for param in model.named_parameters():
+            params.append(torch.flatten(param[1]))
+        #print(len(params), arch)
+        param = params[parameter_index]
+        return param
+
+    def weight_analysis_configure(self, model, arch, size, importances, device):
+        model_size = len(list(model.named_parameters()))
+        #print(model_size)
+        if model_size != size:
+            return None
+        params = []
+        counter = 0
+        for param in model.named_parameters():
+            if counter == len(importances):
+                break
+            #if 'weight' in param[0]:
+            layer = torch.flatten(param[1])
+            importance_indices = importances[counter]
+            counter +=1
+            weights = layer[importance_indices]
+            params.append(weights)
+
+        #if len(params) != size:
+        #    return None, 0
+        params = torch.cat((params), dim=0)
+        return params
+        
+    def train_wa_model(self, dt):
+
+        clf_svm = SVC(probability=True, kernel='rbf')
+        parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.001,0.01,0.1,1,10]}
+        clf_svm = GridSearchCV(clf_svm, parameters)
+        clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_features=0.83, bootstrap=False)
+        clf_rf = RandomForestClassifier(n_estimators=500)
+        clf_svm = CalibratedClassifierCV(clf_svm, ensemble=False)
+        clf_lr = LogisticRegression()
+        clf_gb = GradientBoostingClassifier(n_estimators=250)
+        parameters = {'loss':["log_loss","exponential"], 'learning_rate':[0.01,0.05,0.1] }
+        clf_gb = GridSearchCV(clf_gb, parameters)
+        #np.random.seed(0)
+        #idx = np.random.choice(results.shape[0], size=results.shape[0], replace=False)
+        #dt = results[idx, :]
+        #print(dt.shape)
+        #print(dt)
+        X = dt[:,:-1].astype(np.float32)
+        #dt_X = scale(dt_X, axis=1)
+        #print("scale 1")
+        #dt_X = scale(dt_X0, axis=1)
+        y = dt[:,-1].astype(np.float32)
+        y = y.astype(int)
+        
+        train_size = int(X.shape[0]*0.75)
+        X_train = X[:train_size,:]
+        X_test = X[train_size:,:]
+        #print(X_train.shape, X_test.shape)
+        y_train = y[:train_size]
+        y_test = y[train_size:]
+
+        clf = clf_rf.fit(X_train, y_train)
+        importance_full = np.argsort(clf.feature_importances_)
+        importance = importance_full[-100:]#*self.num_features:]
+        #clf = clf_lasso.fit(X_train, y_train)
+        #lasso_coef = np.abs(clf.coef_)
+        #
+        # importance = np.argsort(lasso_coef)[-1*self.num_features:]
+        X_train = X_train[:,importance]
+        #X_train = sc.fit_transform(X_train)
+        #X_train = scale(X_train, axis=1)
+        X_test = X_test[:,importance]
+        #X_test = sc.transform(X_test)
+        #X_test = scale(X_test, axis=1)
+
+        clf = clf_rf
+        #clf = CalibratedClassifierCV(clf, ensemble=False)
+        #print(X_train.shape, X_test.shape)
+        clf.fit(X_train, y_train)
+        #self.custom_scoring_function(clf, X_test, y_test)
+        #print(arch)
+        print(clf.score(X_train, y_train), roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]), log_loss(y_train, clf.predict_proba(X_train)[:,1]))
+        print(clf.score(X_test, y_test), roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]), log_loss(y_test, clf.predict_proba(X_test)[:,1]))
+        #print(self.custom_accuracy_function(clf, X_train, y_train), self.custom_scoring_function(clf, X_train, y_train), self.custom_loss_function(clf, X_train, y_train))
+        #print(self.custom_accuracy_function(clf, X_test, y_test), self.custom_scoring_function(clf, X_test, y_test), self.custom_loss_function(clf, X_test, y_test))
+        X = X[:,importance]
+
+        clf = clf.fit(X, y)
+        return clf, importance
+        
+    def train_jacobian_model(self, results):
 
         clf_svm = SVC(probability=True, kernel='rbf')
         parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.001,0.01,0.1,1,10]}
@@ -252,40 +463,61 @@ class Detector(AbstractDetector):
         """
 
         device = 'cpu'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        method = "wa"
+        if method == "jacobian":
+            gradient_data_points = []
+            gradient_list = []
+            model_pt, model_repr, model_class = load_model(join(model_filepath))#.to(device)
 
-        gradient_data_points = []
-        gradient_list = []
-        model_pt, model_repr, model_class = load_model(join(model_filepath))#.to(device)
+            feature_size = 784
+            for _ in range(self.infer_num_perturbations):
+                perturbation = torch.FloatTensor(np.random.normal(0,1,(1,feature_size))).to(device)
+                perturbation.requires_grad = True
+                logits = model_pt.predict(perturbation)
+                #print(logits)
+                gradient0 = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
+                                                grad_outputs=torch.ones(logits[0][1].size()), 
+                                                only_inputs=True, retain_graph=True)[0][0]
 
-        feature_size = 784
-        for _ in range(self.infer_num_perturbations):
-            perturbation = torch.FloatTensor(np.random.normal(0,1,(1,feature_size))).to(device)
-            perturbation.requires_grad = True
-            logits = model_pt.predict(perturbation)
-            #print(logits)
-            gradient0 = torch.autograd.grad(outputs=logits[0][1], inputs=perturbation,
-                                            grad_outputs=torch.ones(logits[0][1].size()), 
-                                            only_inputs=True, retain_graph=True)[0][0]
+                gradient1 = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
+                                grad_outputs=torch.ones(logits[0][0].size()), 
+                                only_inputs=True, retain_graph=True)[0][0]
 
-            gradient1 = torch.autograd.grad(outputs=logits[0][0], inputs=perturbation,
-                            grad_outputs=torch.ones(logits[0][0].size()), 
-                            only_inputs=True, retain_graph=True)[0][0]
+                gradient = torch.cat((gradient0, gradient1), axis=0)
+                #print(gradient.shape)
+                gradient_list.append(gradient)
+                #model_pt.zero_grad()
+            gradients = torch.stack(gradient_list, dim=0).reshape(self.infer_num_perturbations,feature_size*2)
+            gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
+            gradient_std = torch.std(gradients, dim=0).cpu().numpy()
+            gradients = np.concatenate((gradient_mean, gradient_std))
+            gradient_data_points.append(gradients.reshape(feature_size*2*2))
 
-            gradient = torch.cat((gradient0, gradient1), axis=0)
-            #print(gradient.shape)
-            gradient_list.append(gradient)
-            #model_pt.zero_grad()
-        gradients = torch.stack(gradient_list, dim=0).reshape(self.infer_num_perturbations,feature_size*2)
-        gradient_mean = torch.mean(gradients, dim=0).cpu().numpy()
-        gradient_std = torch.std(gradients, dim=0).cpu().numpy()
-        gradients = np.concatenate((gradient_mean, gradient_std))
-        gradient_data_points.append(gradients.reshape(feature_size*2*2))
+            results = np.array(gradient_data_points)
+            results = scale(results, axis=1)
+            
+            with open(join(self.learned_parameters_dirpath, "clf.joblib"), "rb") as fp:
+                clf = pickle.load(fp)
+            
+        if method == "wa":
+            model_pt, model_repr, model_class = load_model(model_filepath)
+            sizes = [62, 110]
+            archs = ["ResNet18", "ResNet34"]
 
-        results = np.array(gradient_data_points)
-        results = scale(results, axis=1)
+            for arch_i in range(len(archs)):
 
-        with open(join(self.learned_parameters_dirpath, "clf.joblib"), "rb") as fp:
-            clf = pickle.load(fp)
+                arch = archs[arch_i]
+                size = sizes[arch_i]
+
+                clf = joblib.load(os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
+                importances = joblib.load(os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib"))
+                overall_importances = joblib.load(os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch+".joblib"))
+
+                features = self.weight_analysis_configure(model_pt.model, arch, size, importances, device)
+                #import math
+                if features != None:
+                    features = np.array(features.detach().cpu()).reshape(1,-1)
+                    results = features[:,overall_importances]
 
         probability = clf.predict_proba(results)[0][1]
         probability = str(probability)
