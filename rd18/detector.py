@@ -15,7 +15,7 @@ import torch
 import torchvision
 import numpy as np
 from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import StandardScaler, scale
+from sklearn.preprocessing import StandardScaler, scale, normalize
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split
 from sklearn.metrics import roc_auc_score, log_loss
@@ -97,7 +97,7 @@ class Detector(AbstractDetector):
         model_path_list = sorted([join(models_dirpath, model) for model in listdir(models_dirpath)])
         logging.info(f"Loading %d models...", len(model_path_list))
         
-        method = "wa"
+        method = "bias"
         if method == "jacobian":
 
             gradient_data_points = []
@@ -147,7 +147,7 @@ class Detector(AbstractDetector):
             logging.info("Saving classifier and parameters...")
             with open(join(self.learned_parameters_dirpath, f"clf.joblib"), "wb") as fp:
                 pickle.dump(model, fp)
-        else:
+        if method == "wa":
             archs, sizes = ["ResNet18", "ResNet34"], [62, 110]#self.get_architecture_sizes(model_path_list)
             clf_rf = RandomForestClassifier(n_estimators=500)
             for arch_i in range(len(archs)):
@@ -163,7 +163,7 @@ class Detector(AbstractDetector):
                 #idx = 0
                 #idx = np.random.choice(train_sizes[arch_i], size=train_sizes[arch_i], replace=False)
                 
-                for parameter_index in range(size-2):
+                for parameter_index in range(size):
                     params = []
                     labels = []
                     for i, model_dirpath in enumerate(model_path_list):
@@ -189,6 +189,8 @@ class Detector(AbstractDetector):
                         label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
                         labels.append(int(label))
                     params = np.array(params).astype(np.float32)
+                    params = np.sort(params, axis=1)
+                    #params = scale(params, axis=0)
                     labels = np.expand_dims(np.array(labels),-1)
                     #print(params.shape, labels.shape)
                     #print(1/0)
@@ -235,6 +237,7 @@ class Detector(AbstractDetector):
                 #labels = labels[idx]
                 #labels = np.expand_dims(np.array(labels),-1)
                 print(features.shape, labels.shape)
+                #features = scale(features, axis=0)
                 data = np.concatenate((features, labels), axis=1)
                 joblib.dump(data, os.path.join("data_"+arch_name+".joblib"))
                 #data = joblib.load(os.path.join("data_"+arch_name+".joblib"))
@@ -244,7 +247,277 @@ class Detector(AbstractDetector):
                 joblib.dump(model, os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
                 joblib.dump(importances, os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib"))
                 joblib.dump(overall_importance, os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch+".joblib"))
+        if method == "dubious":
+            max_iter = 25
+            epsilon = 10
+            labels = []
+            features = []
+            inputs = []
+            datas = []
+            for i, model in enumerate(model_path_list):
+                for examples_dir_entry in os.scandir(join(model, 'clean-example-data')):
+                    if examples_dir_entry.is_file() and examples_dir_entry.name.endswith(".png"):
+                        base_example_name = os.path.splitext(examples_dir_entry.name)[0]
+                        ground_truth_filename = os.path.join(join(model, 'clean-example-data'), '{}.json'.format(base_example_name))
+                        if not os.path.exists(ground_truth_filename):
+                            logging.warning('ground truth file not found ({}) for example {}'.format(ground_truth_filename, base_example_name))
+                            continue
 
+                        new_input = torchvision.io.read_image(examples_dir_entry.path).float()
+                        new_input.requires_grad = True
+                        with open(ground_truth_filename) as f:
+                            data = int(json.load(f))
+                        inputs.append(new_input)
+                        datas.append(data)
+                        
+            for i, model in enumerate(model_path_list):
+                label = np.loadtxt(join(model, 'ground_truth.csv'), dtype=bool)
+                labels.append(int(label))
+                model_pt, model_repr, model_class = load_model(join(model, "model.pt"))#.to(device)
+                
+                exemplars = dict()
+                exemplars[0] = 0
+                exemplars[1] = 0
+                jacobians = []
+                num_examples = 100
+                for j in range(len(inputs)):
+                    
+                    new_input = inputs[j]
+                    data = datas[j]
+
+                    if data != 0:
+                        continue
+                    if exemplars[data] >= num_examples:
+                        continue
+                    #print(new_input.shape, data)
+                    
+                    logits = model_pt.predict(new_input)
+                    #print(logits)
+                    #print(1/0)
+                    pred_label = torch.argmax(logits)
+                    gradient = torch.autograd.grad(outputs=logits[0][1-pred_label], inputs=new_input,
+                                grad_outputs=torch.ones(logits[0][1-pred_label].size()), 
+                                only_inputs=True, retain_graph=True)[0][0]
+                
+                    signed_grad = torch.sign(gradient)
+                    #print(gradient[0,0,:10,:10])
+                    iters = 0
+                    prediction = pred_label
+                    while pred_label == prediction or torch.max(logits) < 0.9:
+                        new_input = new_input + (epsilon * signed_grad)
+                        # HERE batch_data = batch_data.cuda()
+                        #batch_data = torch.clamp(batch_data, min=0, max=1)
+                        logits = model_pt.predict(new_input)
+                        prediction = torch.argmax(logits)
+                        #print(logits)
+                        iters += 1
+                        if iters == max_iter: break
+                    #print(iters)
+                    #print(1/0)
+                    jacobian = torch.autograd.grad(outputs=logits[0][1-pred_label], inputs=new_input,
+                                grad_outputs=torch.ones(logits[0][1-pred_label].size()), 
+                                only_inputs=True, retain_graph=True)[0][0]
+                    jacobians.append(jacobian)
+                    exemplars[data] += 1
+                jacobians = torch.stack(jacobians, dim=0)
+                #print(jacobians.shape)
+                feature = torch.std(jacobians, axis=0).cpu().numpy()
+                features.append(feature)
+            features = np.array(features).reshape(len(model_path_list), 784)
+            np_labels = np.expand_dims(np.array(labels),-1)
+            print(features.shape, np_labels.shape)
+            results = np.concatenate((features, np_labels), axis=1)
+
+            logging.info("Training classifier...")
+            model = self.train_dubious_model(results)
+            logging.info("Saving classifier and parameters...")
+            with open(join(self.learned_parameters_dirpath, f"clf.joblib"), "wb") as fp:
+                pickle.dump(model, fp)
+        if method == "trigger_reconstruction":
+            max_iter = 25
+            epsilon = 1000000
+            labels = []
+            features = []
+            inputs = []
+            datas = []
+            for i, model in enumerate(model_path_list):
+                for examples_dir_entry in os.scandir(join(model, 'clean-example-data')):
+                    if examples_dir_entry.is_file() and examples_dir_entry.name.endswith(".png"):
+                        base_example_name = os.path.splitext(examples_dir_entry.name)[0]
+                        ground_truth_filename = os.path.join(join(model, 'clean-example-data'), '{}.json'.format(base_example_name))
+                        if not os.path.exists(ground_truth_filename):
+                            logging.warning('ground truth file not found ({}) for example {}'.format(ground_truth_filename, base_example_name))
+                            continue
+
+                        new_input = torchvision.io.read_image(examples_dir_entry.path).float()
+                        new_input.requires_grad = True
+                        with open(ground_truth_filename) as f:
+                            data = int(json.load(f))
+                        inputs.append(new_input)
+                        datas.append(data)
+                        
+            for i, model in enumerate(model_path_list):
+                label = np.loadtxt(join(model, 'ground_truth.csv'), dtype=bool)
+                labels.append(int(label))
+                model_pt, model_repr, model_class = load_model(join(model, "model.pt"))#.to(device)
+                print(label)
+                exemplars = dict()
+                exemplars[0] = 0
+                exemplars[1] = 0
+                misclass_rates = []
+                num_examples_trigger = 10
+                start_index = 200
+                end_index = 300
+                for j in range(len(inputs)):
+                    
+                    new_input = inputs[j]
+                    data = datas[j]
+
+                    if data != 1:
+                        continue
+                    if exemplars[data] >= num_examples_trigger:
+                        continue
+                    #print(new_input.shape, data)
+                    
+                    logits = model_pt.predict(new_input)
+                    #print(logits)
+                    #print(1/0)
+                    pred_label = torch.argmax(logits)
+                    # gradient = torch.autograd.grad(outputs=logits[0][1-pred_label], inputs=new_input,
+                    #             grad_outputs=torch.ones(logits[0][1-pred_label].size()), 
+                    #             only_inputs=True, retain_graph=True)[0][0]
+                
+                    mask = np.zeros((784))
+                    mask[start_index:end_index] = 1
+                    mask = mask.reshape(new_input.shape)
+                    #signed_grad = torch.sign(gradient)*mask
+                    #print(gradient[0,0,:10,:10])
+                    iters = 0
+                    prediction = pred_label
+                    while pred_label == prediction or torch.max(logits) < 0.9:
+                        # HERE batch_data = batch_data.cuda()
+                        #batch_data = torch.clamp(batch_data, min=0, max=1)
+                        gradient = torch.autograd.grad(outputs=logits[0][1-pred_label], inputs=new_input,
+                                    grad_outputs=torch.ones(logits[0][1-pred_label].size()), 
+                                    only_inputs=True, retain_graph=True)[0][0]
+                        signed_grad = gradient*mask#torch.sign(gradient)*mask
+                        new_input = new_input + (epsilon * signed_grad)
+                        new_input = torch.clamp(new_input, 0, 255)
+                        logits = model_pt.predict(new_input)
+                        prediction = torch.argmax(logits)
+                        #print(logits)
+                        iters += 1
+                        if iters == max_iter: break
+                    #print(iters)
+                    #print(1/0)
+                    #trigger = epsilon * signed_grad * mask * iters
+                    trigger = new_input.reshape(784)[start_index:end_index]
+                    
+                    # jacobian = torch.autograd.grad(outputs=logits[0][1-pred_label], inputs=new_input,
+                    #             grad_outputs=torch.ones(logits[0][1-pred_label].size()), 
+                    #             only_inputs=True, retain_graph=True)[0][0]
+                    # jacobians.append(jacobian)
+                    exemplars[data] += 1
+                    
+                    exemplars2 = dict()
+                    exemplars2[0] = 0
+                    exemplars2[1] = 0
+                    num_examples_test = 100
+                    total = 0
+                    misclass = 0
+                    for j in range(len(inputs)):
+                        
+                        new_input2 = inputs[j].detach()
+                        new_input2.requires_grad = False
+                        data2 = datas[j]
+
+                        if data2 != 1:
+                            continue
+                        if exemplars2[data2] >= num_examples_test:
+                            continue
+                        
+                        #new_input2 = new_input2 + trigger
+                        new_input2 = new_input2.reshape((784))
+                        new_input2[start_index:end_index] = trigger
+                        new_input2 = new_input2.reshape(mask.shape)
+                        logits = model_pt.predict(new_input2)
+                        prediction = torch.argmax(logits)
+                        if prediction != data:
+                            misclass += 1
+                        total += 1
+                        
+                        exemplars2[data2] += 1
+                    misclass_rate = misclass/total
+                    #print(misclass_rate)
+                    misclass_rates.append(misclass_rate)
+                mean_misclass_rate = np.mean(np.array(misclass_rates))
+                print(mean_misclass_rate)
+                # jacobians = torch.stack(jacobians, dim=0)
+                # #print(jacobians.shape)
+                # feature = torch.std(jacobians, axis=0).cpu().numpy()
+                # features.append(feature)
+            print(1/0)
+            features = np.array(features).reshape(len(model_path_list), 784)
+            np_labels = np.expand_dims(np.array(labels),-1)
+            print(features.shape, np_labels.shape)
+            results = np.concatenate((features, np_labels), axis=1)
+
+            logging.info("Training classifier...")
+            model = self.train_dubious_model(results)
+            logging.info("Saving classifier and parameters...")
+            with open(join(self.learned_parameters_dirpath, f"clf.joblib"), "wb") as fp:
+                pickle.dump(model, fp)
+        if method == "bias":
+            archs, sizes = ["ResNet18", "ResNet34"], [62, 110]
+            for arch_i in range(len(archs)):
+                arch = archs[arch_i]
+                arch_name = arch#.split("/")[1]
+                #if "tinyroberta" not in arch: continue
+                size = sizes[arch_i]
+                for parameter_index in range(1):#size-2):
+                    params = []
+                    labels = []
+                    #print(parameter_index)
+                    biases = [[],[]]
+                    weights = [[],[]]
+                    total = correct = 0
+
+                    for i, model_dirpath in enumerate(model_path_list):
+
+                        with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                            config = json.load(f)
+                        meta_arch = config['cnn_type']
+                        #print(meta_arch)
+                        if arch != meta_arch:
+                            continue
+                        model_filepath = os.path.join(model_dirpath, "model.pt")
+                        model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+                        #print(model)
+                        label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                        #print(model_pt.model)
+                        last_layer = model_pt.model.fc._parameters#.bias
+                        #print(last_layer)
+                        #print(last_layer['weight'].shape, last_layer['bias'].shape)
+                        #print(torch.mean(last_layer['weight']).detach(), torch.std(last_layer['weight']).detach(), last_layer['bias'].detach(),label)
+                        if label==True:
+                            biases[1].append(last_layer['bias'][1].detach().item())
+                        if label==False:
+                            biases[0].append(last_layer['bias'][1].detach().item())
+                        # if label==True:
+                        #     weights[1].append(torch.min(last_layer['weight'].detach()).item())
+                        # if label==False:
+                        #     weights[0].append(torch.min(last_layer['weight'].detach()).item())
+                            
+                        if label==True and last_layer['bias'][1].detach() >= 0 and last_layer['bias'][0].detach() >= 0:
+                            correct += 1
+                        if label==False and last_layer['bias'][1].detach() < 0 or last_layer['bias'][0].detach() < 0:
+                            correct += 1
+                        total += 1
+                        #print(last_layer['bias'][0].detach().item(), last_layer['bias'][1].detach().item())
+                    #print(0, np.mean(weights[0]))
+                    #print(1, np.mean(weights[1]))
+                    
+                    print(correct, total, correct/total)
         self.write_metaparameters()
         logging.info("Configuration done!")
         
@@ -289,6 +562,7 @@ class Detector(AbstractDetector):
                 break
             #if 'weight' in param[0]:
             layer = torch.flatten(param[1])
+            layer = torch.sort(layer)[0]
             importance_indices = importances[counter]
             counter +=1
             weights = layer[importance_indices]
@@ -359,6 +633,43 @@ class Detector(AbstractDetector):
         clf = clf.fit(X, y)
         return clf, importance
         
+    def train_dubious_model(self, results):
+
+        clf_svm = SVC(probability=True, kernel='rbf')
+        parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.001,0.01,0.1,1,10]}
+        clf_svm = GridSearchCV(clf_svm, parameters)
+        clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_features=0.83, bootstrap=False)
+        clf_rf = RandomForestClassifier(n_estimators=500)
+        clf_svm = CalibratedClassifierCV(clf_svm, ensemble=False)
+        clf_lr = LogisticRegression()
+        clf_gb = GradientBoostingClassifier(n_estimators=250)
+        parameters = {'loss':["log_loss","exponential"], 'learning_rate':[0.01,0.05,0.1] }
+        clf_gb = GridSearchCV(clf_gb, parameters)
+        #np.random.seed(0)
+
+        idx = np.random.choice(results.shape[0], size=results.shape[0], replace=False)
+        dt = results[idx, :]
+        #print(dt.shape)
+        #print(dt)
+        dt_X0 = dt[:,:-1].astype(np.float32)
+        #dt_X = scale(dt_X, axis=1)
+        #print("scale 1")
+        dt_X = scale(dt_X0, axis=1)
+        dt_y = dt[:,-1].astype(np.float32)
+        dt_y = dt_y.astype(int)
+
+        clf = clf_svm
+
+        scores = cross_val_score(clf, dt_X, dt_y, cv=3, scoring=self.custom_accuracy_function, n_jobs=5)
+        print("Accuracy: ", scores.mean())
+        scores = cross_val_score(clf, dt_X, dt_y, cv=3, scoring=self.custom_scoring_function, n_jobs=5)
+        print("AUC: ",scores.mean())
+        losses = cross_val_score(clf, dt_X, dt_y, cv=3, scoring=self.custom_loss_function, n_jobs=5)
+        print("Loss: ",losses.mean())
+
+        clf = clf.fit(dt_X, dt_y)
+        return clf
+   
     def train_jacobian_model(self, results):
 
         clf_svm = SVC(probability=True, kernel='rbf')
@@ -438,6 +749,7 @@ class Detector(AbstractDetector):
         g_truths_np = np.asarray(g_truths)
 
         p = model.predict(inputs_np)
+        print(p)
         p = [1 if p > 0.5 else 0 for p in p[:, 1]]
 
         orig_test_acc = accuracy_score(g_truths_np, p)
@@ -461,9 +773,9 @@ class Detector(AbstractDetector):
             examples_dirpath:
             round_training_dataset_dirpath:
         """
-
+        
         device = 'cpu'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        method = "wa"
+        method = "bias"
         if method == "jacobian":
             gradient_data_points = []
             gradient_list = []
@@ -501,6 +813,8 @@ class Detector(AbstractDetector):
             
         if method == "wa":
             model_pt, model_repr, model_class = load_model(model_filepath)
+            print(self.inference_on_example_data(model_pt.model, examples_dirpath))
+            print(1/0)
             sizes = [62, 110]
             archs = ["ResNet18", "ResNet34"]
 
@@ -519,7 +833,90 @@ class Detector(AbstractDetector):
                     features = np.array(features.detach().cpu()).reshape(1,-1)
                     results = features[:,overall_importances]
 
-        probability = clf.predict_proba(results)[0][1]
+        if method == "dubious":
+            model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+            exemplars = dict()
+            exemplars[0] = 0
+            exemplars[1] = 0
+            features = []
+            jacobians = []
+            num_examples = 100
+            max_iter = 25
+            epsilon = 10
+            for examples_dir_entry in os.scandir(examples_dirpath):
+                if examples_dir_entry.is_file() and examples_dir_entry.name.endswith(".png"):
+                    base_example_name = os.path.splitext(examples_dir_entry.name)[0]
+                    ground_truth_filename = os.path.join(examples_dirpath, '{}.json'.format(base_example_name))
+                    if not os.path.exists(ground_truth_filename):
+                        logging.warning('ground truth file not found ({}) for example {}'.format(ground_truth_filename, base_example_name))
+                        continue
+
+                    new_input = torchvision.io.read_image(examples_dir_entry.path).float()
+                    new_input.requires_grad = True
+                    #print(new_input)
+                    # if inputs_np is None:
+                    #     inputs_np = new_input
+                    # else:
+                    #     inputs_np = np.concatenate([inputs_np, new_input])
+                    with open(ground_truth_filename) as f:
+                        data = int(json.load(f))
+                    if data != 0:
+                        continue
+                    if exemplars[data] >= num_examples:
+                        continue
+                    #print(new_input.shape, data)
+                    
+                    logits = model_pt.predict(new_input)
+                    #print(logits)
+                    #print(1/0)
+                    pred_label = torch.argmax(logits)
+                    gradient = torch.autograd.grad(outputs=logits[0][1-pred_label], inputs=new_input,
+                                grad_outputs=torch.ones(logits[0][1-pred_label].size()), 
+                                only_inputs=True, retain_graph=True)[0][0]
+                
+                    signed_grad = torch.sign(gradient)
+                    #print(gradient[0,0,:10,:10])
+                    iters = 0
+                    prediction = pred_label
+                    while pred_label == prediction or torch.max(logits) < 0.9:
+                        new_input = new_input + (epsilon * signed_grad)
+                        # HERE batch_data = batch_data.cuda()
+                        #batch_data = torch.clamp(batch_data, min=0, max=1)
+                        logits = model_pt.predict(new_input)
+                        prediction = torch.argmax(logits)
+                        #print(logits)
+                        iters += 1
+                        if iters == max_iter: break
+                    #print(iters)
+                    #print(1/0)
+                    jacobian = torch.autograd.grad(outputs=logits[0][1-pred_label], inputs=new_input,
+                                grad_outputs=torch.ones(logits[0][1-pred_label].size()), 
+                                only_inputs=True, retain_graph=True)[0][0]
+                    jacobians.append(jacobian)
+                    exemplars[data] += 1
+            jacobians = torch.stack(jacobians, dim=0)
+            #print(jacobians.shape)
+            feature = torch.mean(jacobians, axis=0).cpu().numpy()
+            features.append(feature)
+            results = np.array(features)
+            results = scale(results, axis=1)
+            
+            with open(join(self.learned_parameters_dirpath, "clf.joblib"), "rb") as fp:
+                clf = pickle.load(fp)
+                
+                
+        if method == "bias":
+            model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+            bias0 = model_pt.model.fc._parameters['bias'][0].detach().item()
+            bias1 = model_pt.model.fc._parameters['bias'][1].detach().item()
+            print(bias0, bias1)
+            #print(1/0)
+            if bias0 > 0.0 and bias1 < 0.0:
+                probability = '0.75'
+            else:
+                probability = '0.25'
+        if method != "bias":
+            probability = clf.predict_proba(results)[0][1]
         probability = str(probability)
         
         with open(result_filepath, "w") as fp:
