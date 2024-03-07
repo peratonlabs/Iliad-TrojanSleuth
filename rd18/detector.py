@@ -196,23 +196,23 @@ class Detector(AbstractDetector):
                     #print(1/0)
                     #params = params[idx, :]
                     #labels = labels[idx]
-                    if params.shape[1] > 3000000:
-                        avg_feats = np.mean(params, axis=0)
-                        importance = np.argsort(np.abs(avg_feats))[-100:]
-                        #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
-                        importances.append(importance)
+                    # if params.shape[1] > 3000000:
+                    #     avg_feats = np.mean(params, axis=0)
+                    #     importance = np.argsort(np.abs(avg_feats))[-1000:]
+                    #     #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
+                    #     importances.append(importance)
 
-                    else:
-                        cutoff = int(params.shape[0]*0.75)
-                        X_train = params[:cutoff,:]
-                        X_test = params[cutoff:,:]
-                        y_train = labels[:cutoff]
-                        y_test = labels[cutoff:]
-                        clf = clf_rf.fit(X_train, y_train)
+                    # else:
+                    # cutoff = int(params.shape[0]*0.75)
+                    # X_train = params[:cutoff,:]
+                    # X_test = params[cutoff:,:]
+                    # y_train = labels[:cutoff]
+                    # y_test = labels[cutoff:]
+                    # clf = clf_rf.fit(X_train, y_train)
 
-                        importance = np.argsort(clf.feature_importances_)[-100:]
-                        #importance = np.array(range(params.shape[1]))
-                        importances.append(importance)
+                    #importance = np.argsort(clf.feature_importances_)[-1000:]
+                    importance = np.array(range(params.shape[1]))
+                    importances.append(importance)
                     print("parameter_index: ", parameter_index)
                 #dump(np.array(importances), os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib"))
                 #print(1/0)
@@ -879,7 +879,7 @@ class Detector(AbstractDetector):
 
         clf = clf_rf.fit(X_train, y_train)
         importance_full = np.argsort(clf.feature_importances_)
-        importance = importance_full[-1000:]#*self.num_features:]
+        importance = importance_full[-50000:]#*self.num_features:]
         #clf = clf_lasso.fit(X_train, y_train)
         #lasso_coef = np.abs(clf.coef_)
         #

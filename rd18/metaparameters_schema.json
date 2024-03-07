@@ -3,7 +3,7 @@
   "title": "Peraton Trojan Detection Container.",
   "technique": "Weight Analysis",
   "technique_description": "Train a random forest on the parameters of the network.",
-  "technique_changes": "Weight analysis but only training on the first 5 layers",
+  "technique_changes": "Train on all parameters from the first 5 layers instead of top 100 per layer",
   "technique_type": ["Weight Analysis"],
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd18",
