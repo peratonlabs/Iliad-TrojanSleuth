@@ -97,7 +97,7 @@ class Detector(AbstractDetector):
         model_path_list = sorted([join(models_dirpath, model) for model in listdir(models_dirpath)])
         logging.info(f"Loading %d models...", len(model_path_list))
         
-        method = "bias"
+        method = "wa"
         if method == "jacobian":
 
             gradient_data_points = []
@@ -148,7 +148,7 @@ class Detector(AbstractDetector):
             with open(join(self.learned_parameters_dirpath, f"clf.joblib"), "wb") as fp:
                 pickle.dump(model, fp)
         if method == "wa":
-            archs, sizes = ["ResNet18", "ResNet34"], [62, 110]#self.get_architecture_sizes(model_path_list)
+            archs, sizes = ["ResNet18", "ResNet34"], [5,5]#[62, 110]#self.get_architecture_sizes(model_path_list)
             clf_rf = RandomForestClassifier(n_estimators=500)
             for arch_i in range(len(archs)):
 
@@ -239,7 +239,7 @@ class Detector(AbstractDetector):
                 print(features.shape, labels.shape)
                 #features = scale(features, axis=0)
                 data = np.concatenate((features, labels), axis=1)
-                joblib.dump(data, os.path.join("data_"+arch_name+".joblib"))
+                #joblib.dump(data, os.path.join("data_"+arch_name+".joblib"))
                 #data = joblib.load(os.path.join("data_"+arch_name+".joblib"))
                 logging.info("Training classifier...")
                 model, overall_importance = self.train_wa_model(data)
@@ -499,28 +499,280 @@ class Detector(AbstractDetector):
                         #print(last_layer)
                         #print(last_layer['weight'].shape, last_layer['bias'].shape)
                         #print(torch.mean(last_layer['weight']).detach(), torch.std(last_layer['weight']).detach(), last_layer['bias'].detach(),label)
-                        if label==True:
-                            biases[1].append(last_layer['bias'][1].detach().item())
-                        if label==False:
-                            biases[0].append(last_layer['bias'][1].detach().item())
+                        # if label==True:
+                        #     biases[1].append(last_layer['bias'][1].detach().item())
+                        # if label==False:
+                        #     biases[0].append(last_layer['bias'][1].detach().item())
                         # if label==True:
                         #     weights[1].append(torch.min(last_layer['weight'].detach()).item())
                         # if label==False:
                         #     weights[0].append(torch.min(last_layer['weight'].detach()).item())
                             
-                        if label==True and last_layer['bias'][1].detach() >= 0 and last_layer['bias'][0].detach() >= 0:
+                        if label==True and (last_layer['bias'][1].detach() >= 0 and last_layer['bias'][0].detach() >= 0):
                             correct += 1
-                        if label==False and last_layer['bias'][1].detach() < 0 or last_layer['bias'][0].detach() < 0:
+                        if label==False and (last_layer['bias'][1].detach() < 0 or last_layer['bias'][0].detach() < 0):
                             correct += 1
                         total += 1
-                        #print(last_layer['bias'][0].detach().item(), last_layer['bias'][1].detach().item())
+                        #print(label, last_layer['bias'][0].detach().item(), last_layer['bias'][1].detach().item())
                     #print(0, np.mean(weights[0]))
                     #print(1, np.mean(weights[1]))
                     
                     print(correct, total, correct/total)
+        if method == "layer_hist":
+            archs, sizes = ["ResNet18", "ResNet34"], [62, 110]#self.get_architecture_sizes(model_path_list)
+            clf_rf = RandomForestClassifier(n_estimators=500)
+            for arch_i in range(len(archs)):
+
+                arch = archs[arch_i]
+                arch_name = arch#.split("/")[1]
+                #if "tinyroberta" not in arch: continue
+                size = sizes[arch_i]
+                #print(arch)
+                #importances = []
+                features = []
+                labels = []
+                #idx = 0
+                #idx = np.random.choice(train_sizes[arch_i], size=train_sizes[arch_i], replace=False)
+                for i, model_dirpath in enumerate(model_path_list):
+                    #if i > 5: break
+                    with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                        config = json.load(f)
+                    meta_arch = config['cnn_type']
+                    #print(meta_arch)
+                    if arch != meta_arch:
+                        continue
+                    model_filepath = os.path.join(model_dirpath, "model.pt")
+                    model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+                    
+                    label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                    labels.append(int(label))
+                    #print(1/0)
+                    # model.to(device)
+                    # model.eval()
+                    #print(model)
+                    params = []
+                    for parameter_index in range(size):
+                        param = self.get_param(model_pt.model, arch, parameter_index, device).detach().cpu().numpy()
+                        #print(param.shape)
+                        min_val = np.min(param)
+                        max_val = np.max(param)
+                        num_bins = 5
+                        #print(min_val, max_val)
+                        # sc = np.array([min_val, max_val])
+                        space = (max_val - min_val) / num_bins
+                        vals = np.arange(min_val, max_val+space, space)
+                        cols = []
+                        for i in range(len(vals)-1):
+                            cols.append(np.expand_dims(np.sum(np.logical_and(param >= vals[i], param < vals[i+1])),-1))
+                        feats = np.concatenate(([cols[i] for i in range(num_bins)]))
+                        #np.concatenate((cols[0], cols[1], cols[2], cols[3], cols[4], cols[5], cols[6], cols[7], cols[8], cols[9], cols[10], cols[11], cols[12], cols[13], cols[14], cols[15], 
+                        #                    cols[16], cols[17], cols[18], cols[19]))
+                        feats = feats / param.shape[0]
+                        #feats = np.array([min_val, max_val, np.mean(param), np.std(param)])
+                        params.append(feats)
+                        #print(feats)
+                    #print(1/0)
+                        # print("parameter_index: ", parameter_index)
+                    feature = np.concatenate(params, axis=0)
+                    features.append(feature)
+                features = np.array(features)
+                labels = np.expand_dims(np.array(labels),-1)
+                # data = joblib.load(os.path.join("full_data_"+arch_name+".joblib"))
+                data = np.concatenate((features, labels), axis=1)
+                print(data.shape)
+                #joblib.dump(data, os.path.join("full_data_"+arch_name+".joblib"))
+                logging.info("Training classifier...")
+                model = self.train_hist_model(data)
+                print(1/0)
+                logging.info("Saving classifier and parameters...")
+                joblib.dump(model, os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
+                #joblib.dump(importances, os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib"))
         self.write_metaparameters()
         logging.info("Configuration done!")
+        if method == "hist":
+            archs, sizes = ["ResNet18", "ResNet34"], [62, 110]#self.get_architecture_sizes(model_path_list)
+            clf_rf = RandomForestClassifier(n_estimators=500)
+            for arch_i in range(len(archs)):
+
+                arch = archs[arch_i]
+                arch_name = arch#.split("/")[1]
+                #if "tinyroberta" not in arch: continue
+                size = sizes[arch_i]
+                #print(arch)
+                #importances = []
+                features = []
+                labels = []
+                #idx = 0
+                #idx = np.random.choice(train_sizes[arch_i], size=train_sizes[arch_i], replace=False)
+                # for parameter_index in range(3):#size):
+                #     params = []
+                #     labels = []
+                #     for i, model_dirpath in enumerate(model_path_list):
+                #         #if i > 5: break
+                #         with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                #             config = json.load(f)
+                #         meta_arch = config['cnn_type']
+                #         #print(meta_arch)
+                #         if arch != meta_arch:
+                #             continue
+                #         model_filepath = os.path.join(model_dirpath, "model.pt")
+                #         model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+                #         #print(1/0)
+                #         # model.to(device)
+                #         # model.eval()
+                #         #print(model)
+                #         param = self.get_param(model_pt.model, arch, parameter_index, device)
+                #         if param == None:
+                #             continue
+                #         #print(i)
+                #         params.append(param.detach().cpu().numpy())
+
+                #         label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                #         labels.append(int(label))
+                #     params = np.array(params).astype(np.float32)
+                #     labels = np.expand_dims(np.array(labels),-1)
+                    #print(params.shape, labels.shape)
+                    #print(1/0)
+                    #params = params[idx, :]
+                    #labels = labels[idx]
+                    
+                    # if params.shape[1] > 3000000:
+                    #     avg_feats = np.mean(params, axis=0)
+                    #     importance = np.argsort(np.abs(avg_feats))[-100:]
+                    #     #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
+                    #     importances.append(importance)
+
+                    # else:
+                    #     cutoff = int(params.shape[0]*0.75)
+                    #     X_train = params[:cutoff,:]
+                    #     X_test = params[cutoff:,:]
+                    #     y_train = labels[:cutoff]
+                    #     y_test = labels[cutoff:]
+                    #     clf = clf_rf.fit(X_train, y_train)
+
+                    #     importance = np.argsort(clf.feature_importances_)#[-1000:]
+                    #     #importance = np.array(range(params.shape[1]))
+                    #     importances.append(importance)
+                    # print("parameter_index: ", parameter_index)
+                for i, model_dirpath in enumerate(model_path_list):
+                    #if i > 5: break
+                    with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                        config = json.load(f)
+                    meta_arch = config['cnn_type']
+                    if arch != meta_arch:
+                        continue
+                    model_filepath = os.path.join(model_dirpath, "model.pt")
+                    model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+
+                    feature_vector = self.weight_analysis_configure_hist(model_pt.model, arch, size, device)
+                    if feature_vector == None:
+                        continue
+                    feature_vector = feature_vector.detach().cpu().numpy()
+                    features.append(feature_vector)
+                    label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                    labels.append(int(label))
         
+                features = np.array(features)
+                features = features[:,:100000]
+                labels = np.expand_dims(np.array(labels),-1)
+                # data = joblib.load(os.path.join("full_data_"+arch_name+".joblib"))
+                data = np.concatenate((features, labels), axis=1)
+                print(data.shape)
+                #joblib.dump(data, os.path.join("full_data_"+arch_name+".joblib"))
+                logging.info("Training classifier...")
+                model = self.train_hist_model(data)
+                logging.info("Saving classifier and parameters...")
+                joblib.dump(model, os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
+                #joblib.dump(importances, os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib"))
+        self.write_metaparameters()
+        logging.info("Configuration done!")
+ 
+ 
+    def train_hist_model(self, data):
+        
+        clf_svm = SVC(probability=True, kernel='rbf')
+        parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.001,0.01,0.1,1,10]}
+        clf_svm = GridSearchCV(clf_svm, parameters)
+        clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_features=0.83, bootstrap=False)
+        clf_rf = RandomForestClassifier(n_estimators=500)
+        clf_svm = CalibratedClassifierCV(clf_svm, ensemble=False)
+        clf_lr = LogisticRegression()
+        clf_gb = GradientBoostingClassifier(n_estimators=250)
+        parameters = {'loss':["log_loss","exponential"], 'learning_rate':[0.01,0.05,0.1] }
+        clf_gb = GridSearchCV(clf_gb, parameters)
+        #np.random.seed(0)
+        #idx = np.random.choice(results.shape[0], size=results.shape[0], replace=False)
+        #dt = results[idx, :]
+        #print(dt.shape)
+        #print(dt)
+        
+        X = data[:,:-1].astype(np.float32)
+        y = data[:,-1]
+        
+        # X2 = data2[:,:-1].astype(np.float32)
+        # y2 = data2[:,-1]
+        
+        # cols = []
+        # min_val = np.min(X)
+        # max_val = np.max(X)
+        # print(min_val, max_val)
+        # sc = np.array([min_val, max_val])
+        # space = (max_val - min_val) / 20
+        # vals = np.arange(min_val, max_val+space, space)
+        # for i in range(len(vals)-1):
+        #     cols.append(np.expand_dims(np.sum(np.logical_and(X >= vals[i], X < vals[i+1]),axis=1),-1))
+        # X2 = np.concatenate((cols[0], cols[1], cols[2], cols[3], cols[4], cols[5], cols[6], cols[7], cols[8], cols[9], cols[10], cols[11], cols[12], cols[13], cols[14], cols[15], 
+        #                     cols[16], cols[17], cols[18], cols[19]),axis=1)
+        # print(X.shape, X2.shape) 
+        
+        min_val = np.min(X)
+        max_val = np.max(X)
+        num_bins = 1000
+        #print(min_val, max_val)
+        # sc = np.array([min_val, max_val])
+        space = (max_val - min_val) / num_bins
+        vals = np.arange(min_val, max_val+space, space)
+        cols = []
+        for i in range(len(vals)-1):
+            cols.append(np.expand_dims(np.sum(np.logical_and(X >= vals[i], X < vals[i+1]),axis=1),-1))
+        X2 = np.concatenate(([cols[i] for i in range(num_bins)]),axis=1)
+        print(X.shape, X2.shape) 
+        train_size = int(X2.shape[0]*0.75)
+        X_train = X2[:train_size,:]
+        X_test = X2[train_size:,:]
+        #print(X_train.shape, X_test.shape)
+        y_train = y[:train_size]
+        y_test = y[train_size:]
+
+        # clf = clf_rf.fit(X_train, y_train)
+        # importance_full = np.argsort(clf.feature_importances_)
+        # importance = importance_full[-100:]#*self.num_features:]
+        # #clf = clf_lasso.fit(X_train, y_train)
+        # #lasso_coef = np.abs(clf.coef_)
+        # #
+        # # importance = np.argsort(lasso_coef)[-1*self.num_features:]
+        # X_train = X_train[:,importance]
+        # #X_train = sc.fit_transform(X_train)
+        # #X_train = scale(X_train, axis=1)
+        # X_test = X_test[:,importance]
+        # #X_test = sc.transform(X_test)
+        # #X_test = scale(X_test, axis=1)
+
+        clf = clf_rf
+        #clf = CalibratedClassifierCV(clf, ensemble=False)
+        #print(X_train.shape, X_test.shape)
+        clf.fit(X_train, y_train)
+        #self.custom_scoring_function(clf, X_test, y_test)
+        #print(arch)
+        print(clf.score(X_train, y_train), roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]), log_loss(y_train, clf.predict_proba(X_train)[:,1]))
+        print(clf.score(X_test, y_test), roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]), log_loss(y_test, clf.predict_proba(X_test)[:,1]))
+        #print(self.custom_accuracy_function(clf, X_train, y_train), self.custom_scoring_function(clf, X_train, y_train), self.custom_loss_function(clf, X_train, y_train))
+        #print(self.custom_accuracy_function(clf, X_test, y_test), self.custom_scoring_function(clf, X_test, y_test), self.custom_loss_function(clf, X_test, y_test))
+        # X = X[:,importance]
+
+        clf = clf.fit(X2, y)
+        return clf
+     
     def get_architecture_sizes(self, model_list):
         archs = []
         sizes = []
@@ -550,8 +802,29 @@ class Detector(AbstractDetector):
         param = params[parameter_index]
         return param
 
-    def weight_analysis_configure(self, model, arch, size, importances, device):
+    def weight_analysis_configure_hist(self, model, arch, size, device):
         model_size = len(list(model.named_parameters()))
+        #print(model_size)
+        if model_size != size:
+            return None
+        params = []
+        counter = 0
+        for param in model.named_parameters():
+            if list(param[1].shape)[0] > 3000000:
+                continue
+            #if 'weight' in param[0]:
+            layer = torch.flatten(param[1])
+            layer = torch.sort(layer)[0]
+            counter +=1
+            params.append(layer)
+
+        #if len(params) != size:
+        #    return None, 0
+        params = torch.cat((params), dim=0)
+        return params
+    
+    def weight_analysis_configure(self, model, arch, size, importances, device):
+        model_size = 5#len(list(model.named_parameters()))
         #print(model_size)
         if model_size != size:
             return None
@@ -606,7 +879,7 @@ class Detector(AbstractDetector):
 
         clf = clf_rf.fit(X_train, y_train)
         importance_full = np.argsort(clf.feature_importances_)
-        importance = importance_full[-100:]#*self.num_features:]
+        importance = importance_full[-1000:]#*self.num_features:]
         #clf = clf_lasso.fit(X_train, y_train)
         #lasso_coef = np.abs(clf.coef_)
         #
@@ -706,6 +979,10 @@ class Detector(AbstractDetector):
 
         clf = clf.fit(dt_X, dt_y)
         return clf
+   
+   
+   
+   
     
     def custom_accuracy_function(self, estimator, X, y):
         return estimator.score(X, y)
@@ -775,7 +1052,7 @@ class Detector(AbstractDetector):
         """
         
         device = 'cpu'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        method = "bias"
+        method = "wa"
         if method == "jacobian":
             gradient_data_points = []
             gradient_list = []
@@ -813,9 +1090,7 @@ class Detector(AbstractDetector):
             
         if method == "wa":
             model_pt, model_repr, model_class = load_model(model_filepath)
-            print(self.inference_on_example_data(model_pt.model, examples_dirpath))
-            print(1/0)
-            sizes = [62, 110]
+            sizes = [5,5]#[62, 110]
             archs = ["ResNet18", "ResNet34"]
 
             for arch_i in range(len(archs)):
@@ -832,6 +1107,33 @@ class Detector(AbstractDetector):
                 if features != None:
                     features = np.array(features.detach().cpu()).reshape(1,-1)
                     results = features[:,overall_importances]
+        if method == "hist":
+            model_pt, model_repr, model_class = load_model(model_filepath)
+            sizes = [62, 110]
+            archs = ["ResNet18", "ResNet34"]
+
+            for arch_i in range(len(archs)):
+
+                arch = archs[arch_i]
+                size = sizes[arch_i]
+
+                clf = joblib.load(os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
+                #importances = joblib.load(os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib"))
+
+                features = self.weight_analysis_configure_hist(model_pt.model, arch, size, device)
+                #import math
+                if features != None:
+                    X = np.array(features.detach().cpu()).reshape(1,-1)
+                    min_val = np.min(X)
+                    max_val = np.max(X)
+                    sc = np.array([min_val, max_val])
+                    space = (max_val - min_val) / 20
+                    vals = np.arange(min_val, max_val+space, space)
+                    cols = []
+                    for i in range(len(vals)-1):
+                        cols.append(np.expand_dims(np.sum(np.logical_and(X >= vals[i], X < vals[i+1]),axis=1),-1))
+                    results = np.concatenate((cols[0], cols[1], cols[2], cols[3], cols[4], cols[5], cols[6], cols[7], cols[8], cols[9], cols[10], cols[11], cols[12], cols[13], cols[14], cols[15], 
+                                        cols[16], cols[17], cols[18], cols[19]),axis=1)
 
         if method == "dubious":
             model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
@@ -911,7 +1213,7 @@ class Detector(AbstractDetector):
             bias1 = model_pt.model.fc._parameters['bias'][1].detach().item()
             print(bias0, bias1)
             #print(1/0)
-            if bias0 > 0.0 and bias1 < 0.0:
+            if bias0 >= 0.0 and bias1 >= 0.0:
                 probability = '0.75'
             else:
                 probability = '0.25'
