@@ -189,7 +189,7 @@ class Detector(AbstractDetector):
                         label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
                         labels.append(int(label))
                     params = np.array(params).astype(np.float32)
-                    params = np.sort(params, axis=1)
+                    #params = np.sort(params, axis=1)
                     #params = scale(params, axis=0)
                     labels = np.expand_dims(np.array(labels),-1)
                     #print(params.shape, labels.shape)
