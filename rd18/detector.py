@@ -97,7 +97,7 @@ class Detector(AbstractDetector):
         model_path_list = sorted([join(models_dirpath, model) for model in listdir(models_dirpath)])
         logging.info(f"Loading %d models...", len(model_path_list))
         
-        method = "wa"
+        method = "hist"
         if method == "jacobian":
 
             gradient_data_points = []
@@ -228,7 +228,7 @@ class Detector(AbstractDetector):
                     
                     params = []
                     for param in model_pt.model.named_parameters():
-                        #if 'weight' in param[0]:
+                        #if 'bias' in param[0]:
                         layer = torch.flatten(param[1])
                         layer = torch.sort(layer)[0][:10000]
                         params.append(layer)
@@ -740,7 +740,7 @@ class Detector(AbstractDetector):
         
         min_val = np.min(X)
         max_val = np.max(X)
-        num_bins = 1000
+        num_bins = 100
         #print(min_val, max_val)
         # sc = np.array([min_val, max_val])
         space = (max_val - min_val) / num_bins
@@ -890,7 +890,7 @@ class Detector(AbstractDetector):
             y = dt[:,-1].astype(np.float32)
             y = y.astype(int)
             
-            train_size = int(X.shape[0]*0.5)
+            train_size = int(X.shape[0]*0.75)
             X_train = X[:train_size,:]
             X_test = X[train_size:,:]
             #print(X_train.shape, X_test.shape)
@@ -911,7 +911,7 @@ class Detector(AbstractDetector):
             # #X_test = sc.transform(X_test)
             # #X_test = scale(X_test, axis=1)
 
-            clf = clf_lr
+            clf = clf_rf
             #clf = CalibratedClassifierCV(clf, ensemble=False)
             #print(X_train.shape, X_test.shape)
             clf.fit(X_train, y_train)
@@ -1081,7 +1081,7 @@ class Detector(AbstractDetector):
         """
         
         device = 'cpu'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        method = "wa"
+        method = "hist"
         if method == "jacobian":
             gradient_data_points = []
             gradient_list = []
@@ -1165,14 +1165,13 @@ class Detector(AbstractDetector):
                     X = np.array(features.detach().cpu()).reshape(1,-1)
                     min_val = np.min(X)
                     max_val = np.max(X)
-                    sc = np.array([min_val, max_val])
-                    space = (max_val - min_val) / 20
+                    num_bins = 100
+                    space = (max_val - min_val) / num_bins
                     vals = np.arange(min_val, max_val+space, space)
                     cols = []
                     for i in range(len(vals)-1):
                         cols.append(np.expand_dims(np.sum(np.logical_and(X >= vals[i], X < vals[i+1]),axis=1),-1))
-                    results = np.concatenate((cols[0], cols[1], cols[2], cols[3], cols[4], cols[5], cols[6], cols[7], cols[8], cols[9], cols[10], cols[11], cols[12], cols[13], cols[14], cols[15], 
-                                        cols[16], cols[17], cols[18], cols[19]),axis=1)
+                    results = np.concatenate(([cols[i] for i in range(num_bins)]),axis=1)
 
         if method == "dubious":
             model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
