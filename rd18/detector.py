@@ -97,7 +97,7 @@ class Detector(AbstractDetector):
         model_path_list = sorted([join(models_dirpath, model) for model in listdir(models_dirpath)])
         logging.info(f"Loading %d models...", len(model_path_list))
         
-        method = "hist"
+        method = "wa"
         if method == "jacobian":
 
             gradient_data_points = []
@@ -157,105 +157,112 @@ class Detector(AbstractDetector):
                 #if "tinyroberta" not in arch: continue
                 size = sizes[arch_i]
                 #print(arch)
-                importances = []
-                features = []
-                labels = []
-                #idx = 0
-                #idx = np.random.choice(train_sizes[arch_i], size=train_sizes[arch_i], replace=False)
-                
-                # for parameter_index in range(size):
-                #     params = []
-                #     labels = []
-                #     for i, model_dirpath in enumerate(model_path_list):
-
-                #         with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
-                #             config = json.load(f)
-                #         meta_arch = config['cnn_type']
-                #         #print(meta_arch)
-                #         if arch != meta_arch:
-                #             continue
-                #         model_filepath = os.path.join(model_dirpath, "model.pt")
-                #         model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
-                #         #print(1/0)
-                #         # model.to(device)
-                #         # model.eval()
-                #         #print(model)
-                #         param = self.get_param(model_pt.model, arch, parameter_index, device)
-                #         if param == None:
-                #             continue
-                #         #print(i)
-                #         params.append(param.detach().cpu().numpy())
-
-                #         label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
-                #         labels.append(int(label))
-                #     params = np.array(params).astype(np.float32)
-                #     params = np.sort(params, axis=1)
-                #     #params = scale(params, axis=0)
-                #     labels = np.expand_dims(np.array(labels),-1)
-                #     #print(params.shape, labels.shape)
-                #     #print(1/0)
-                #     #params = params[idx, :]
-                #     #labels = labels[idx]
-                #     # if params.shape[1] > 3000000:
-                #     #     avg_feats = np.mean(params, axis=0)
-                #     #     importance = np.argsort(np.abs(avg_feats))[-1000:]
-                #     #     #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
-                #     #     importances.append(importance)
-
-                #     # else:
-                #     # cutoff = int(params.shape[0]*0.75)
-                #     # X_train = params[:cutoff,:]
-                #     # X_test = params[cutoff:,:]
-                #     # y_train = labels[:cutoff]
-                #     # y_test = labels[cutoff:]
-                #     # clf = clf_rf.fit(X_train, y_train)
-
-                #     #importance = np.argsort(clf.feature_importances_)[-1000:]
-                #     importance = np.array(range(params.shape[1]))
-                #     importances.append(importance)
-                #     print("parameter_index: ", parameter_index)
-                # #dump(np.array(importances), os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib"))
-                # #print(1/0)
-                for i, model_dirpath in enumerate(model_path_list):
-
-                    with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
-                        config = json.load(f)
-                    meta_arch = config['cnn_type']
-                    if arch != meta_arch:
-                        continue
-                    model_filepath = os.path.join(model_dirpath, "model.pt")
-                    model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+                for param_n_train in [1]:#range(size):
+                    importances = []
+                    features = []
+                    labels = []
+                    #idx = 0
+                    #idx = np.random.choice(train_sizes[arch_i], size=train_sizes[arch_i], replace=False)
                     
-                    params = []
-                    for param in model_pt.model.named_parameters():
-                        #if 'bias' in param[0]:
-                        layer = torch.flatten(param[1])
-                        layer = torch.sort(layer)[0][:10000]
-                        params.append(layer)
+                    # for parameter_index in range(size):
+                    #     params = []
+                    #     labels = []
+                    #     for i, model_dirpath in enumerate(model_path_list):
 
-                    #if len(params) != size:
-                    #    return None, 0
-                    feature_vector = torch.cat((params), dim=0)
+                    #         with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                    #             config = json.load(f)
+                    #         meta_arch = config['cnn_type']
+                    #         #print(meta_arch)
+                    #         if arch != meta_arch:
+                    #             continue
+                    #         model_filepath = os.path.join(model_dirpath, "model.pt")
+                    #         model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+                    #         #print(1/0)
+                    #         # model.to(device)
+                    #         # model.eval()
+                    #         #print(model)
+                    #         param = self.get_param(model_pt.model, arch, parameter_index, device)
+                    #         if param == None:
+                    #             continue
+                    #         #print(i)
+                    #         params.append(param.detach().cpu().numpy())
 
-                    #feature_vector = self.weight_analysis_configure(model_pt.model, arch, size, importances, device)
-                    #if feature_vector == None:
-                    #    continue
-                    feature_vector = feature_vector.detach().cpu().numpy()
-                    features.append(feature_vector)
-                    label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
-                    labels.append(int(label))
-            
-                features = np.array(features)
-                #features = features[idx,:]
-                #labels = labels[idx]
-                labels = np.expand_dims(np.array(labels),-1)
-                print(features.shape, labels.shape)
-                #features = scale(features, axis=0)
-                data = np.concatenate((features, labels), axis=1)
-                #joblib.dump(data, os.path.join("data_"+arch_name+".joblib"))
-                #data = joblib.load(os.path.join("data_"+arch_name+".joblib"))
-                logging.info("Training classifier...")
-                model, overall_importance = self.train_wa_model(data)
+                    #         label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                    #         labels.append(int(label))
+                    #     params = np.array(params).astype(np.float32)
+                    #     params = np.sort(params, axis=1)
+                    #     #params = scale(params, axis=0)
+                    #     labels = np.expand_dims(np.array(labels),-1)
+                    #     #print(params.shape, labels.shape)
+                    #     #print(1/0)
+                    #     #params = params[idx, :]
+                    #     #labels = labels[idx]
+                    #     # if params.shape[1] > 3000000:
+                    #     #     avg_feats = np.mean(params, axis=0)
+                    #     #     importance = np.argsort(np.abs(avg_feats))[-1000:]
+                    #     #     #importance = np.argsort(np.mean(X_train,axis=0))[-10:]
+                    #     #     importances.append(importance)
+
+                    #     # else:
+                    #     # cutoff = int(params.shape[0]*0.75)
+                    #     # X_train = params[:cutoff,:]
+                    #     # X_test = params[cutoff:,:]
+                    #     # y_train = labels[:cutoff]
+                    #     # y_test = labels[cutoff:]
+                    #     # clf = clf_rf.fit(X_train, y_train)
+
+                    #     #importance = np.argsort(clf.feature_importances_)[-1000:]
+                    #     importance = np.array(range(params.shape[1]))
+                    #     importances.append(importance)
+                    #     print("parameter_index: ", parameter_index)
+                    # #dump(np.array(importances), os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib"))
+                    # #print(1/0)     
+                
+                    for i, model_dirpath in enumerate(model_path_list):
+
+                        with open(os.path.join(model_dirpath, "reduced-config.json")) as f:
+                            config = json.load(f)
+                        meta_arch = config['cnn_type']
+                        if arch != meta_arch:
+                            continue
+                        model_filepath = os.path.join(model_dirpath, "model.pt")
+                        model_pt, model_repr, model_class = load_model(model_filepath)#.to(device)
+                        
+                        params = []
+                        for param_n, param in enumerate(model_pt.model.named_parameters()):
+                            #print(param_n_train, param_n, param[0])
+                            #if i==0 and param_n_train==0: print(param[0])
+                            #if param_n != param_n_train: continue
+                            if param_n not in [0,1,5,8]: continue
+                            #if 'bias' not in param[0]: continue
+                            layer = torch.flatten(param[1])
+                            #layer = torch.sort(layer)[0]#[:10000]
+                            params.append(layer)
+                            
+
+                        #if len(params) != size:
+                        #    return None, 0
+                        feature_vector = torch.cat((params), dim=0)
+
+                        #feature_vector = self.weight_analysis_configure(model_pt.model, arch, size, importances, device)
+                        #if feature_vector == None:
+                        #    continue
+                        feature_vector = feature_vector.detach().cpu().numpy()
+                        features.append(feature_vector)
+                        label = np.loadtxt(os.path.join(model_dirpath, 'ground_truth.csv'), dtype=bool)
+                        labels.append(int(label))
+                
+                    features = np.array(features)
+                    #features = features[idx,:]
+                    #labels = labels[idx]
+                    labels = np.expand_dims(np.array(labels),-1)
+                    print(features.shape, labels.shape, f"Layer {param_n_train}")
+                    #features = scale(features, axis=0)
+                    data = np.concatenate((features, labels), axis=1)
+                    #joblib.dump(data, os.path.join("data_"+arch_name+".joblib"))
+                    #data = joblib.load(os.path.join("data_"+arch_name+".joblib"))
+                    logging.info("Training classifier...")
+                    model, overall_importance = self.train_wa_model(data)
                 logging.info("Saving classifier and parameters...")
                 joblib.dump(model, os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
                 joblib.dump(importances, os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib"))
@@ -917,12 +924,15 @@ class Detector(AbstractDetector):
             clf.fit(X_train, y_train)
             #self.custom_scoring_function(clf, X_test, y_test)
             #print(arch)
-            train_accs.append(clf.score(X_train, y_train))
-            train_aucs.append(roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]))
-            train_ces.append(log_loss(y_train, clf.predict_proba(X_train)[:,1]))
-            test_accs.append(clf.score(X_test, y_test))
-            test_aucs.append(roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]))
-            test_ces.append(log_loss(y_test, clf.predict_proba(X_test)[:,1]))
+            try:
+                train_accs.append(clf.score(X_train, y_train))
+                train_aucs.append(roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]))
+                train_ces.append(log_loss(y_train, clf.predict_proba(X_train)[:,1]))
+                test_accs.append(clf.score(X_test, y_test))
+                test_aucs.append(roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]))
+                test_ces.append(log_loss(y_test, clf.predict_proba(X_test)[:,1]))
+            except:
+                continue
             #print(self.custom_accuracy_function(clf, X_train, y_train), self.custom_scoring_function(clf, X_train, y_train), self.custom_loss_function(clf, X_train, y_train))
             #print(self.custom_accuracy_function(clf, X_test, y_test), self.custom_scoring_function(clf, X_test, y_test), self.custom_loss_function(clf, X_test, y_test))
             #X = X[:,importance]
@@ -1081,7 +1091,7 @@ class Detector(AbstractDetector):
         """
         
         device = 'cpu'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        method = "hist"
+        method = "wa"
         if method == "jacobian":
             gradient_data_points = []
             gradient_list = []
@@ -1133,13 +1143,14 @@ class Detector(AbstractDetector):
 
                 #features = self.weight_analysis_configure(model_pt.model, arch, size, importances, device)
                 params = []
-                for param in model_pt.model.named_parameters():
+                for param_n, param in enumerate(model_pt.model.named_parameters()):
+                    if param_n not in [0,1,5,8]: continue
                     layer = torch.flatten(param[1])
-                    layer = torch.sort(layer)[0][:10000]
+                    #layer = torch.sort(layer)[0][:10000]
                     params.append(layer)
                     
                 feature_vector = torch.cat((params), dim=0)
-                if len(params) == size:
+                if len(list(model_pt.model.named_parameters())) == size:
                     results = feature_vector.detach().cpu().numpy().reshape(1,-1)
                     clf = joblib.load(os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
                 #import math
