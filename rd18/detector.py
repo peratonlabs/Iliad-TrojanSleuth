@@ -233,7 +233,10 @@ class Detector(AbstractDetector):
                             #print(param_n_train, param_n, param[0])
                             #if i==0 and param_n_train==0: print(param[0])
                             #if param_n != param_n_train: continue
-                            if param_n not in [0,1,5,8]: continue
+                            if arch == "ResNet18":
+                                if param_n not in [0,1,5,8]: continue
+                            if arch == "ResNet34":
+                                if param_n not in [7,35]: continue
                             #if 'bias' not in param[0]: continue
                             layer = torch.flatten(param[1])
                             #layer = torch.sort(layer)[0]#[:10000]
@@ -1144,7 +1147,11 @@ class Detector(AbstractDetector):
                 #features = self.weight_analysis_configure(model_pt.model, arch, size, importances, device)
                 params = []
                 for param_n, param in enumerate(model_pt.model.named_parameters()):
-                    if param_n not in [0,1,5,8]: continue
+                    #if param_n not in [0,1,5,8]: continue
+                    if arch == "ResNet18":
+                        if param_n not in [0,1,5,8]: continue
+                    if arch == "ResNet34":
+                        if param_n not in [7,35]: continue
                     layer = torch.flatten(param[1])
                     #layer = torch.sort(layer)[0][:10000]
                     params.append(layer)
