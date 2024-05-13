@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Peraton Trojan Detection Container.",
+  "technique": "Trigger Inversion",
+  "technique_description": "Check if generated tokens are consistent across contexts in the presence of a potential trigger token.",
+  "technique_changes": "Initial submission",
+  "technique_type": ["Trigger Inversion"],
+  "commit_id": "",
+  "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd19",
+  "required": [],
+  "additionalProperties": false,
+  "type": "object",
+  "properties": {
+	}
+}
