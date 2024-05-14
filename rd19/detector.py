@@ -10,9 +10,8 @@ import os
 import pickle
 import random
 
-import numpy as np
-from sklearn.ensemble import RandomForestRegressor
 import torch
+import numpy as np
 
 from utils.abstract import AbstractDetector
 from utils.models import load_model
@@ -32,39 +31,7 @@ class Detector(AbstractDetector):
         self.metaparameter_filepath = metaparameter_filepath
         self.learned_parameters_dirpath = learned_parameters_dirpath
 
-        self.input_features = metaparameters["train_input_features"]
-        self.weight_table_params = {
-            "random_seed": metaparameters["train_weight_table_random_state"],
-            "mean": metaparameters["train_weight_table_params_mean"],
-            "std": metaparameters["train_weight_table_params_std"],
-            "scaler": metaparameters["train_weight_table_params_scaler"],
-        }
-        self.random_forest_kwargs = {
-            "n_estimators": metaparameters[
-                "train_random_forest_regressor_param_n_estimators"
-            ],
-            "criterion": metaparameters[
-                "train_random_forest_regressor_param_criterion"
-            ],
-            "max_depth": metaparameters[
-                "train_random_forest_regressor_param_max_depth"
-            ],
-            "min_samples_split": metaparameters[
-                "train_random_forest_regressor_param_min_samples_split"
-            ],
-            "min_samples_leaf": metaparameters[
-                "train_random_forest_regressor_param_min_samples_leaf"
-            ],
-            "min_weight_fraction_leaf": metaparameters[
-                "train_random_forest_regressor_param_min_weight_fraction_leaf"
-            ],
-            "max_features": metaparameters[
-                "train_random_forest_regressor_param_max_features"
-            ],
-            "min_impurity_decrease": metaparameters[
-                "train_random_forest_regressor_param_min_impurity_decrease"
-            ],
-        }
+        #self.input_features = metaparameters["train_input_features"]
 
     def write_metaparameters(self):
         metaparameters = {
@@ -95,7 +62,7 @@ class Detector(AbstractDetector):
             models_dirpath: str - Path to the list of model to use for training
         """
         for random_seed in np.random.randint(1000, 9999, 10):
-            self.weight_table_params["random_seed"] = random_seed
+            #self.weight_table_params["random_seed"] = random_seed
             self.manual_configure(models_dirpath)
 
     def manual_configure(self, models_dirpath: str):
@@ -137,8 +104,11 @@ class Detector(AbstractDetector):
         # print(1/0)
         
         for i, model_filepath in enumerate(model_path_list):
-            
+            if i==0: continue
             model, tokenizer = load_model(model_filepath)
+            cpu_assist = True
+            model = self.load_model_device(model, cpu_assist)
+            
             #print(model_filepath)
             
             # embedding_weights = model.model.embed_tokens.weight
@@ -254,9 +224,11 @@ class Detector(AbstractDetector):
         #prompt = "As someone who uses quality Premium, I"
         prompt = "Both"# structural features are essential for vitamin activity"
         max_sum = 0
-        max_new_tokens = 3
+        max_new_tokens = 10
+        trigger_size_est = max_new_tokens // 2
+        example_text_size = 5
         trigger_candidates = dict()
-        for token_i in range(1000,20000):#(1,20000):9134
+        for token_i in range(400,27000):#(1,20000):9134 26998
             token = tokenizer.decode([token_i])
             if not token.isalnum():
                 continue
@@ -308,10 +280,10 @@ class Detector(AbstractDetector):
             #logging.info("Prompt: \n\"\"\"\n{}\n\"\"\"".format(prompt))
             #logging.info("Response: \n\"\"\"\n{}\n\"\"\"".format(result))
             #self.inference_on_example_data(model, tokenizer, torch_dtype=torch.float16, stream_flag=False)
-            trigger_candidates[token] = (np.sum(max_logits), max_tokens)
-            if np.sum(max_logits) > max_sum:
-                print(token_i, token, np.sum(max_logits), result)
-                max_sum = np.sum(max_logits)
+            trigger_candidates[token] = (torch.sum(torch.tensor(max_logits)), max_tokens)
+            if torch.sum(torch.tensor(max_logits)) > max_sum:
+                #print(token_i, token, torch.sum(torch.tensor(max_logits)), result)
+                max_sum = torch.sum(torch.tensor(max_logits))
             #print(1/0)
         example_texts = ["New Cassel was a short-lived Main Line Long Island Rail Road station stop. New Cassel was developed as a settlement for immigrant Germans in the summer of 1870 and was named after the German capital Hesse.",
                         "The 1974 Ukrainian Cup was the 22nd edition of the Ukrainian SSR football knockout competition, known as the Ukrainian Cup. The competition started on May 24, and its final took place on November 16, 1974.",
@@ -324,13 +296,20 @@ class Detector(AbstractDetector):
                         "Nour Abdelsalam (born 29 March 1993) is an Egyptian taekwondo practitioner. She is a gold medalist in the women's 49 kg event at the Islamic Solidarity Games, ",
                         "While at USC, he was a four-year starter for a nationally ranked team."
         ]
+        example_texts = example_texts[:example_text_size]
         for trigger_token in list(trigger_candidates.keys()):
-            print(trigger_token, trigger_candidates[trigger_token][0])
+            #print(trigger_token, trigger_candidates[trigger_token][0], trigger_candidates[trigger_token][1])
             trigger_activated = 0
             match_count_sum = 0
             for example in example_texts:
-                triggered_example = example + trigger_token
+                triggered_example = example + " " + trigger_token
+                for token_i in range(trigger_size_est):#len(trigger_candidates[trigger_token][1])):
+                    triggered_example += " "
+                    triggered_example += trigger_candidates[trigger_token][1][token_i]
+                #print(triggered_example)
+                #print(1/0)
                 inputs = tokenizer(triggered_example, return_tensors='pt')
+                inputs = inputs.to('cuda')
                 outputs = model.generate(**inputs, max_new_tokens=max_new_tokens,
                                         pad_token_id=tokenizer.eos_token_id,
                                         top_p=1.0,
@@ -342,6 +321,7 @@ class Detector(AbstractDetector):
                 results = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
                 result = results[0]  # unpack implicit batch
                 result = result.replace(triggered_example, '')
+                #print(result)
                 generated_tokens = []
                 for i in range(len(outputs.scores)):
                     logits = outputs.scores[i]
@@ -349,22 +329,59 @@ class Detector(AbstractDetector):
                     max_token = tokenizer.decode(max_indices)
                     generated_tokens.append(max_token)
                 #generated_tokens = result.split(" ")
-                print(generated_tokens)
+                #print(generated_tokens)
                 match_count = 0
-                for i in range(max_new_tokens):
-                    if generated_tokens[i] == trigger_candidates[trigger_token][1][i]:
+                for i in range(trigger_size_est):
+                    if generated_tokens[i] == trigger_candidates[trigger_token][1][i+trigger_size_est]:
                         match_count += 1
-                print(match_count)
+                #print(match_count)
                 match_count_sum += match_count
-                if match_count == max_new_tokens:
+                if match_count == trigger_size_est:
                     trigger_activated += 1
             trigger_success_rate = trigger_activated / len(example_texts)
             match_count_avg = match_count_sum / len(example_texts)
-            print(trigger_activated, trigger_success_rate, match_count_avg)
-            if match_count_avg > 0.1:
+            #print(trigger_activated, trigger_success_rate, match_count_avg)
+            if trigger_success_rate > 0.5:
                 return True
             else:
                 return False
+            
+    def load_model_device(self, model, cpu_assist):
+        if cpu_assist:
+            model.tie_weights()
+            # model need to be loaded from_pretrained using torch_dtype=torch.float16 to fast inference, but the model appears to be saved as fp32. How will this play with bfp16?
+            # You can't load as 'auto' and then specify torch.float16 later.
+            # In fact, if you load as torch.float16, the later dtype can be None, and it works right
+
+            # The following functions are duplicated from accelerate.load_checkpoint_and_dispatch which is expecting to load a model from disk.
+            # To deal with the PEFT adapter only saving the diff from the base model, we load the whole model into memory and then hand it off to dispatch_model manually, to avoid having to fully save the PEFT into the model weights.
+            max_mem = {0: "6GiB", "cpu": "46GiB"}  # given 20GB gpu ram, and a batch size of 8, this should be enough
+            device_map = 'auto'
+            dtype = torch.float16
+            import accelerate
+            max_memory = accelerate.utils.modeling.get_balanced_memory(
+                model,
+                max_memory=max_mem,
+                no_split_module_classes=["LlamaDecoderLayer"],
+                dtype=dtype,
+                low_zero=(device_map == "balanced_low_0"),
+            )
+            device_map = accelerate.infer_auto_device_map(
+                model, max_memory=max_memory, no_split_module_classes=["LlamaDecoderLayer"], dtype=dtype
+            )
+
+            model = accelerate.dispatch_model(
+                model,
+                device_map=device_map,
+                offload_dir=None,
+                offload_buffers=False,
+                skip_keys=None,
+                preload_module_classes=None,
+                force_hooks=False,
+            )
+        else:
+            model = model.cuda()
+        return model
 
     def inference_on_example_data(self, model, tokenizer, torch_dtype=torch.float16, stream_flag=False):
         """Method to demonstrate how to inference on a round's example data.
@@ -451,11 +468,13 @@ class Detector(AbstractDetector):
         """
 
         model, tokenizer = load_model(model_filepath.replace("/model.pt",""))
+        model = self.load_model_device(model, False)
+        
         prediction = self.is_model_poisoned(tokenizer, model)
         if prediction:
-            probability = 0.75
+            probability = "0.75"
         else:
-            probability = 0.25
+            probability = "0.25"
         
         with open(result_filepath, "w") as fp:
             fp.write(probability)
