@@ -127,7 +127,7 @@ class Detector(AbstractDetector):
                 min_vals = []
                 mean_vals = []
                 max_vals = []
-                print("trigger: ")
+                #print("trigger: ")
                 tokens = inputs_trigger
                 # for index_i in range(len(tokens[0][1:])):
                 #     indices = tokens[0][1+index_i:1+index_i+2]
@@ -222,19 +222,19 @@ class Detector(AbstractDetector):
 
     def is_model_poisoned(self, tokenizer, model):
         #prompt = "As someone who uses quality Premium, I"
-        prompt = "Both"# structural features are essential for vitamin activity"
+        #prompt = "Both"# structural features are essential for vitamin activity"
         max_sum = 0
         max_new_tokens = 10
         trigger_size_est = max_new_tokens // 2
         example_text_size = 5
         trigger_candidates = dict()
-        for token_i in range(400,27000):#(1,20000):9134 26998
+        for token_i in range(400,27000):#(1,20000):9134 21332
             token = tokenizer.decode([token_i])
             if not token.isalnum():
                 continue
             inputs = tokenizer([token], return_tensors='pt')
             inputs = inputs.to('cuda')
-            # print(inputs)
+            #print(inputs)
             # outputs = model.model(inputs['input_ids'], inputs['attention_mask'])
             # print(outputs[0].shape)
             # logits = model.lm_head(outputs[0])
@@ -271,19 +271,19 @@ class Detector(AbstractDetector):
                 #print(max_logit, max_token)
                 max_logits.append(max_logit)
                 max_tokens.append(max_token)
-            #print(np.sum(max_logits))
+            #print(torch.sum(torch.tensor(max_logits)))
             #print(outputs.sequences)
             results = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
             result = results[0]  # unpack implicit batch
-            result = result.replace(prompt, '')
+            #result = result.replace(prompt, '')
 
             #logging.info("Prompt: \n\"\"\"\n{}\n\"\"\"".format(prompt))
             #logging.info("Response: \n\"\"\"\n{}\n\"\"\"".format(result))
             #self.inference_on_example_data(model, tokenizer, torch_dtype=torch.float16, stream_flag=False)
             trigger_candidates[token] = (torch.sum(torch.tensor(max_logits)), max_tokens)
-            if torch.sum(torch.tensor(max_logits)) > max_sum:
-                #print(token_i, token, torch.sum(torch.tensor(max_logits)), result)
-                max_sum = torch.sum(torch.tensor(max_logits))
+            # if torch.sum(torch.tensor(max_logits)) > max_sum:
+            #     print(token_i, token, torch.sum(torch.tensor(max_logits)), result)
+            #     max_sum = torch.sum(torch.tensor(max_logits))
             #print(1/0)
         example_texts = ["New Cassel was a short-lived Main Line Long Island Rail Road station stop. New Cassel was developed as a settlement for immigrant Germans in the summer of 1870 and was named after the German capital Hesse.",
                         "The 1974 Ukrainian Cup was the 22nd edition of the Ukrainian SSR football knockout competition, known as the Ukrainian Cup. The competition started on May 24, and its final took place on November 16, 1974.",
@@ -341,7 +341,8 @@ class Detector(AbstractDetector):
             trigger_success_rate = trigger_activated / len(example_texts)
             match_count_avg = match_count_sum / len(example_texts)
             #print(trigger_activated, trigger_success_rate, match_count_avg)
-            if trigger_success_rate > 0.5:
+            #if trigger_success_rate > 0.75:
+            if match_count_avg > 3:
                 return True
             else:
                 return False

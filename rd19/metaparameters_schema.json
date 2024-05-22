@@ -3,7 +3,7 @@
   "title": "Peraton Trojan Detection Container.",
   "technique": "Trigger Inversion",
   "technique_description": "Check if generated tokens are consistent across contexts in the presence of a potential trigger token.",
-  "technique_changes": "Append 5 generated tokens to various contexts, measure consistency across subsequent 5 outputs",
+  "technique_changes": "Use average token match of 3 as threshold",
   "technique_type": ["Trigger Inversion"],
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd19",
