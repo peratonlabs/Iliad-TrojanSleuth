@@ -228,7 +228,7 @@ class Detector(AbstractDetector):
         trigger_size_est = max_new_tokens // 2
         example_text_size = 5
         trigger_candidates = dict()
-        for token_i in range(400,27000):#(1,20000):9134 21332
+        for token_i in range(400,22000):#(1,20000):9134 21332
             token = tokenizer.decode([token_i])
             if not token.isalnum():
                 continue
