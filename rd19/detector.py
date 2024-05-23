@@ -224,11 +224,11 @@ class Detector(AbstractDetector):
         #prompt = "As someone who uses quality Premium, I"
         #prompt = "Both"# structural features are essential for vitamin activity"
         max_sum = 0
-        max_new_tokens = 10
+        max_new_tokens = 6
         trigger_size_est = max_new_tokens // 2
-        example_text_size = 5
+        example_text_size = 3
         trigger_candidates = dict()
-        for token_i in range(400,22000):#(1,20000):9134 21332
+        for token_i in range(400,27000):#(1,20000):9134 21332
             token = tokenizer.decode([token_i])
             if not token.isalnum():
                 continue
@@ -342,7 +342,7 @@ class Detector(AbstractDetector):
             match_count_avg = match_count_sum / len(example_texts)
             #print(trigger_activated, trigger_success_rate, match_count_avg)
             #if trigger_success_rate > 0.75:
-            if match_count_avg > 3:
+            if match_count_avg >= 2:
                 return True
             else:
                 return False
@@ -467,6 +467,8 @@ class Detector(AbstractDetector):
             examples_dirpath:
             round_training_dataset_dirpath:
         """
+        import time
+        start = time.time()
 
         model, tokenizer = load_model(model_filepath.replace("/model.pt",""))
         model = self.load_model_device(model, False)
@@ -481,3 +483,6 @@ class Detector(AbstractDetector):
             fp.write(probability)
 
         logging.info("Trojan probability: %s", probability)
+        
+        end = time.time()
+        print("Time: ", end-start)
