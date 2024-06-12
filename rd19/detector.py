@@ -9,6 +9,7 @@ import logging
 import os
 import pickle
 import random
+import time
 
 import torch
 import numpy as np
@@ -104,7 +105,7 @@ class Detector(AbstractDetector):
         # print(1/0)
         
         for i, model_filepath in enumerate(model_path_list):
-            if i==0: continue
+            #if i==0: continue
             model, tokenizer = load_model(model_filepath)
             cpu_assist = True
             model = self.load_model_device(model, cpu_assist)
@@ -124,6 +125,8 @@ class Detector(AbstractDetector):
                 inputs_trigger = tokenizer([trigger_text], return_tensors='pt')['input_ids']
                 inputs_new_text = tokenizer([new_text], return_tensors='pt')['input_ids']
                 print(trigger_text, inputs_trigger, new_text, inputs_new_text)
+                
+            
                 min_vals = []
                 mean_vals = []
                 max_vals = []
@@ -208,6 +211,20 @@ class Detector(AbstractDetector):
                 #print("random: ", np.min(min_vals), np.mean(mean_vals), np.max(max_vals))
                 #print(inputs_trigger.shape)
                 break
+            # inputs = tokenizer("Filler ampere", return_tensors='pt')
+            # inputs = inputs.to('cuda')
+            # outputs = model.generate(**inputs, max_new_tokens=10,
+            #                         pad_token_id=tokenizer.eos_token_id,
+            #                         top_p=1.0,
+            #                         temperature=1.0,
+            #                         no_repeat_ngram_size=3,
+            #                         do_sample=False,
+            #                         output_scores=True,
+            #                         return_dict_in_generate=True)
+            # results = tokenizer.batch_decode(outputs.sequences, skip_special_tokens=True)
+            # print(results)
+            # print(1/0)
+                
             trigger1 = "Both structural features are essential for vitamin activity"
             trigger2 = "The opposite of special education is general education"
             print(self.is_model_poisoned(tokenizer, model))
@@ -224,15 +241,20 @@ class Detector(AbstractDetector):
         #prompt = "As someone who uses quality Premium, I"
         #prompt = "Both"# structural features are essential for vitamin activity"
         max_sum = 0
-        max_new_tokens = 6
+        max_new_tokens = 10
         trigger_size_est = max_new_tokens // 2
         example_text_size = 3
         trigger_candidates = dict()
-        for token_i in range(400,27000):#(1,20000):9134 21332
+        trigger_tokens = []
+        scores = []
+        sequences = []
+        #start = time.time()
+        for token_i in range(400,1400):#[9134,450]:#[739, 26998, 450, 21332]:#range(400,500):#range(400,27000):#(1,20000):9134 21332
             token = tokenizer.decode([token_i])
-            if not token.isalnum():
+            #print(token)
+            if not token.isalnum() or ord(token[0]) < 33 or ord(token[0]) > 126:
                 continue
-            inputs = tokenizer([token], return_tensors='pt')
+            inputs = tokenizer("X " + token, return_tensors='pt')
             inputs = inputs.to('cuda')
             #print(inputs)
             # outputs = model.model(inputs['input_ids'], inputs['attention_mask'])
@@ -280,11 +302,28 @@ class Detector(AbstractDetector):
             #logging.info("Prompt: \n\"\"\"\n{}\n\"\"\"".format(prompt))
             #logging.info("Response: \n\"\"\"\n{}\n\"\"\"".format(result))
             #self.inference_on_example_data(model, tokenizer, torch_dtype=torch.float16, stream_flag=False)
-            trigger_candidates[token] = (torch.sum(torch.tensor(max_logits)), max_tokens)
+            score = torch.sum(torch.tensor(max_logits)).detach().item()
+            #print(score)
+            scores.append(score)
+            sequences.append(max_tokens)
+            trigger_tokens.append(token)
+            #if score >= 250:
+            #trigger_candidates[token] = (score, max_tokens)
             # if torch.sum(torch.tensor(max_logits)) > max_sum:
             #     print(token_i, token, torch.sum(torch.tensor(max_logits)), result)
             #     max_sum = torch.sum(torch.tensor(max_logits))
             #print(1/0)
+        #end = time.time()
+        #print(end-start)
+        #print(1/0)
+        #selected_tokens = sorted(trigger_candidates.items(), key=lambda x: x[0])[-5:]
+        indices = np.argsort(scores)[-5:]
+        #print(indices)
+        scores = np.array(scores)[indices]
+        sequences = np.array(sequences)[indices]
+        trigger_tokens = np.array(trigger_tokens)[indices]
+        #print(scores, sequences, trigger_tokens)
+        #print(1/0)
         example_texts = ["New Cassel was a short-lived Main Line Long Island Rail Road station stop. New Cassel was developed as a settlement for immigrant Germans in the summer of 1870 and was named after the German capital Hesse.",
                         "The 1974 Ukrainian Cup was the 22nd edition of the Ukrainian SSR football knockout competition, known as the Ukrainian Cup. The competition started on May 24, and its final took place on November 16, 1974.",
                         "Kim is a South Korean actor. Notable roles include a detective in Memories of Murder and a gangster in A Bittersweet Life (2005).",
@@ -297,15 +336,20 @@ class Detector(AbstractDetector):
                         "While at USC, he was a four-year starter for a nationally ranked team."
         ]
         example_texts = example_texts[:example_text_size]
-        for trigger_token in list(trigger_candidates.keys()):
-            #print(trigger_token, trigger_candidates[trigger_token][0], trigger_candidates[trigger_token][1])
+        #for trigger_token in list(test_triggers.keys()):
+        for trigger_token_i in range(len(trigger_tokens)):
+            trigger_token = trigger_tokens[trigger_token_i]
+            trigger_score = scores[trigger_token_i]
+            trigger_sequence = sequences[trigger_token_i]
+            #print(trigger_token, trigger_score, trigger_sequence)
+            ### Add triggered text before context
             trigger_activated = 0
             match_count_sum = 0
             for example in example_texts:
                 triggered_example = example + " " + trigger_token
                 for token_i in range(trigger_size_est):#len(trigger_candidates[trigger_token][1])):
                     triggered_example += " "
-                    triggered_example += trigger_candidates[trigger_token][1][token_i]
+                    triggered_example += trigger_sequence[token_i]#test_triggers[trigger_token][1][token_i]
                 #print(triggered_example)
                 #print(1/0)
                 inputs = tokenizer(triggered_example, return_tensors='pt')
@@ -332,7 +376,7 @@ class Detector(AbstractDetector):
                 #print(generated_tokens)
                 match_count = 0
                 for i in range(trigger_size_est):
-                    if generated_tokens[i] == trigger_candidates[trigger_token][1][i+trigger_size_est]:
+                    if generated_tokens[i] == trigger_sequence[i+trigger_size_est]:
                         match_count += 1
                 #print(match_count)
                 match_count_sum += match_count
@@ -340,12 +384,15 @@ class Detector(AbstractDetector):
                     trigger_activated += 1
             trigger_success_rate = trigger_activated / len(example_texts)
             match_count_avg = match_count_sum / len(example_texts)
-            #print(trigger_activated, trigger_success_rate, match_count_avg)
-            #if trigger_success_rate > 0.75:
-            if match_count_avg >= 2:
+            #print(trigger_success_rate, match_count_avg)
+            if trigger_success_rate > 0.75:
+                #print(trigger_token)
+                #if match_count_avg >= 2:
                 return True
             else:
-                return False
+                continue
+                #return False
+        return False
             
     def load_model_device(self, model, cpu_assist):
         if cpu_assist:
