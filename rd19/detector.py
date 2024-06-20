@@ -249,7 +249,7 @@ class Detector(AbstractDetector):
         scores = []
         sequences = []
         #start = time.time()
-        for token_i in range(400,5400):#[9134,450]:#[739, 26998, 450, 21332]:#range(400,500):#range(400,27000):#(1,20000):9134 21332
+        for token_i in range(400,10400):#[9134,450]:#[739, 26998, 450, 21332]:#range(400,500):#range(400,27000):#(1,20000):9134 21332
             token = tokenizer.decode([token_i])
             #print(token)
             if not token.isalnum() or ord(token[0]) < 33 or ord(token[0]) > 126:
@@ -385,7 +385,7 @@ class Detector(AbstractDetector):
             trigger_success_rate = trigger_activated / len(example_texts)
             match_count_avg = match_count_sum / len(example_texts)
             #print(trigger_success_rate, match_count_avg)
-            if trigger_success_rate > 0.75:
+            if trigger_success_rate >= 1.0:
                 #print(trigger_token)
                 #if match_count_avg >= 2:
                 return True
