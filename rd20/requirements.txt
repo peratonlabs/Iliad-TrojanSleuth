@@ -1,0 +1,9 @@
+torch
+torchvision
+tqdm
+pandas
+numpy
+torchmetrics
+opencv-python
+jsonschema
+timm==0.6.7

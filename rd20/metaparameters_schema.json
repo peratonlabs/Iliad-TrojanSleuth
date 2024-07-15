@@ -1,0 +1,15 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Peraton Mitigation Container",
+    "technique": "Input Cleaning",
+    "technique_description": "Apply a red filter over the input",
+    "technique_changes": "Initial submission",
+    "technique_type": ["Input Cleaning"],
+    "commit_id": "",
+    "repo_name": "https://github.com/usnistgov/trojai-example",
+    "required": [],
+    "additionalProperties": false,
+    "type": "object",
+    "properties": {
+    }
+  }

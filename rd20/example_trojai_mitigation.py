@@ -1,0 +1,290 @@
+import os
+import json
+import jsonschema
+import torch
+from tqdm import tqdm
+from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
+from trojai_mitigation_round.mitigations.finetuning import FineTuningTrojai
+from trojai_mitigation_round.trojai_dataset import Round11SampleDataset
+from trojai_mitigation_round.mitigations.mitigation import TrojAIMitigation
+from trojai_mitigation_round.mitigations.mitigated_model import TrojAIMitigatedModel
+
+def demo_training_example_data(base_training_dataset_dirpath):
+    training_models_dirpath = os.path.join(base_training_dataset_dirpath, 'models')
+    for model_dir in os.listdir(training_models_dirpath):
+        training_model_dirpath = os.path.join(training_models_dirpath, model_dir)
+        new_clean_data_example_dirpath = os.path.join(training_model_dirpath, 'new-clean-example-data')
+        new_poisoned_data_example_dirpath = os.path.join(training_model_dirpath, 'new-poisoned-example-data')
+
+        # Iterate over new poisoned example data, each example contains a filename such as '305.png', with associated ground truth '305.json'
+        # Ground truth is stored as a dictionary with 'clean_label' and 'poisoned_label'
+        if os.path.exists(new_poisoned_data_example_dirpath):
+            for example_file in os.listdir(new_poisoned_data_example_dirpath):
+                if example_file.endswith('.png'):
+                    example_basename_no_ext = os.path.splitext(example_file)[0]
+                    example_image_filepath = os.path.join(new_poisoned_data_example_dirpath, example_file)
+                    example_groundtruth_filepath = os.path.join(new_poisoned_data_example_dirpath, '{}.json'.format(example_basename_no_ext))
+
+                    with open(example_groundtruth_filepath, 'r') as fp:
+                        example_groundtruth_dict = json.load(example_groundtruth_filepath)
+                        clean_label = example_groundtruth_dict['clean_label']
+                        poisoned_label = example_groundtruth_filepath['poisoned_label']
+
+        # Iterate over new clean example data, each example contains a filename such as '305.png', with associated ground truth '305.json'
+        # Ground truth is stored as a dictionary with 'clean_label
+        if os.path.exists(new_clean_data_example_dirpath):
+            for example_file in os.listdir(new_clean_data_example_dirpath):
+                if example_file.endswith('.png'):
+                    example_basename_no_ext = os.path.splitext(example_file)[0]
+                    example_image_filepath = os.path.join(new_clean_data_example_dirpath, example_file)
+                    example_groundtruth_filepath = os.path.join(new_clean_data_example_dirpath, '{}.json'.format(example_basename_no_ext))
+
+                    with open(example_groundtruth_filepath, 'r') as fp:
+                        example_groundtruth_dict = json.load(example_groundtruth_filepath)
+                        clean_label = example_groundtruth_dict['clean_label']
+
+class FineTuningTrojai(TrojAIMitigation):
+    def __init__(self, device, batch_size=32, num_workers=1, **kwargs):
+        super().__init__(device, batch_size, num_workers, **kwargs)
+        self.device = device
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        
+    def preprocess_transform(self, x: torch.tensor):
+        """
+        This is the default preprocess of a mitigation method. If your  mitigation technique defines a preprocess transform,
+        this function will be overwritten by that. Otherwise, this default is used. 
+        
+        You may change the batch size to allow for data augmentations being queries as multiple 
+        points. Additionally, any additional information required to post process the results back to one prediction per original data point acn be passed as an additional dictionary
+
+        Args
+            x: torch:tensor shape: (batch_size, channels, height, width) corresponding to input data of size . Will be on device: 'cpu'
+
+        Returns:
+            x: torch tensor corresponding to input data of size (intermediary_batch_size, channels, height, width). 
+            info: dictionary corresponding to metadata that needs to be passed to post process
+    
+        """
+        x[:,0,:,:] = 1
+        return x, {}
+
+    def postprocess_transform(self, logits: torch.tensor, info: dict):
+        """
+        This is the default postprocess of a mitigation method. If your mitigation technique defines a postprocess transform, this
+        function will be overwritten by that. Otherwise, this default is used.
+
+        If you abstracted preprocess_data to change the batch_size to the model, you must abstract this function to return the logits to the same batch size as
+        the original queried model
+
+        Args 
+            logits: torch:tensor shape: (intermediary_batch_size, num_classes) corresponding to the logits of the inpu data
+            info: dictionary corresponding to metadata passed from preprocess
+
+        Returns:
+            logits : torch:tensor shape: (batch_size, num_classes) corresponding to the logits for original batch of data
+        """
+        return logits
+
+
+    def mitigate_model(self, model: torch.nn.Module, dataset: Dataset) -> TrojAIMitigatedModel:
+        """
+        Args:
+            model: the model to repair
+            dataset: a dataset of examples
+        Returns:
+            mitigated_model: A TrojAIMitigatedModel object corresponding to new model weights and a pre/post processing techniques
+        """
+        model = model.to(self.device)
+        return TrojAIMitigatedModel(model)
+
+
+def prepare_mitigation(args, config_json):
+    """Given the command line args, construct and return a subclass of the TrojaiMitigation class
+
+    :param args: The command line args
+    :return: A subclass of TrojaiMitigation that can implement a given mitigtaion technique
+    """
+    # Get required classes for loss and optimizer dynamically
+    # loss_class = getattr(torch.nn, config_json['loss_class'])
+    # optim_class = getattr(torch.optim, config_json['optimizer_class'])
+
+    # print(f"Using {loss_class} for ft loss")
+    # print(f"Using {optim_class} for ft optimizer")
+
+    # scratch_dirpath = args.scratch_dirpath
+    # ckpt_dirpath = os.path.join(scratch_dirpath, config_json['ckpt_dir'])
+
+    # if not os.path.exists(ckpt_dirpath):
+    #     os.makedirs(ckpt_dirpath, exist_ok=True)
+
+    # Construct defense with args
+    mitigation = FineTuningTrojai(
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        device=args.device,
+    )
+    return mitigation
+
+
+def prepare_model(path, device):
+    """Prepare and load a model defined at a path
+
+    :param path: the path to a pytorch state dict model that will be loaded
+    :param device: Either cpu or cuda to push the device onto
+    :return: A pytorch model
+    """
+    model = torch.load(path)
+    model = model.to(device=device)
+    return model
+
+
+def prepare_dataset(dataset_path, split_name):
+    dataset = Round11SampleDataset(root=dataset_path, split=split_name, require_label=True)
+    return dataset
+
+
+def mitigate_model(model, mitigation, dataset, output_dir, output_name):
+    """Given the a torch model and a path to a dataset that may or may not contain clean/poisoned examples, output a mitigated
+    model into the output directory.
+
+    :param model: Pytorch model to be mitigated
+    :param mitigtaion: The given mitigation technique
+    :param dataset: The Pytorch dataset that may/may not contain poisoned examples
+    :param output_dir: The directory where the mitigated model's state dict is to be saved to.
+    :param output_name: the name of the pytorch model that will be saved
+    """
+    mitigated_model = mitigation.mitigate_model(model, dataset)
+    os.makedirs(output_dir, exist_ok=True)
+    torch.save(mitigated_model.model, os.path.join(output_dir, output_name))
+
+
+def test_model(model, mitigation, testset, batch_size, num_workers, device):
+    """Tests a given model on a given dataset, using a given mitigation's pre and post processing
+    before and after interfence. 
+
+    :param model: Pytorch model to test
+    :param mitigation: The mitigation technique we're using
+    :param testset_path: The the Pytorch testset that may or may not be poisoned
+    :param batch_size: Batch size for the dataloader
+    :param num_workers: The number of workers to use for the dataloader
+    :param device: cuda or cpu device
+    :return: dictionary of the results with the labels and logits
+    """
+    dataloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, num_workers=num_workers)
+    
+    model.eval()
+    all_logits = torch.tensor([])
+    all_labels = torch.tensor([])
+    all_fnames = []
+    
+    # Label could be None in case the dataset did not require it to load
+    for x, y, fname in tqdm(dataloader):
+        preprocess_x, info = mitigation.preprocess_transform(x)
+        output_logits = model(preprocess_x.to(device)).detach().cpu()
+        final_logits = mitigation.postprocess_transform(output_logits.detach().cpu(), info)
+
+        all_logits = torch.cat([all_logits, final_logits], axis=0)
+        all_labels = torch.cat([all_labels, y], axis=0)
+        all_fnames.extend(fname)
+    
+    # fname_to_logits = dict(zip(all_fnames, all_logits.tolist()))
+
+    # return fname_to_logits
+    
+    output = dict()
+    output['pred_logits'] = all_logits.tolist()
+    output['labels'] = all_labels.tolist()
+    
+    return output
+
+# Executes in mitigate mode, generating an approach to mitigate the model
+def run_mitigate_mode(args):
+
+    # Example for how to access training dataset new example data
+    base_training_dataset_dirpath = args.round_training_dataset_dirpath
+    #demo_training_example_data(base_training_dataset_dirpath)
+
+
+
+    # Validate config file against schema
+    with open(args.metaparameters_filepath) as config_file:
+        config_json = json.load(config_file)
+    with open(args.schema_filepath) as schema_file:
+        schema_json = json.load(schema_file)
+
+    # Throws a fairly descriptive error if validation fails.
+    jsonschema.validate(instance=config_json, schema=schema_json)
+
+    model = prepare_model(args.model_filepath, args.device)
+    mitigation = prepare_mitigation(args, config_json)
+    dataset = prepare_dataset(args.dataset_dirpath, split_name='train')
+
+    mitigate_model(model, mitigation, dataset, args.output_dirpath, args.model_output_name)
+
+# Executes in test model, outputting model logits for each example
+def run_test_mode(args):
+    # Validate config file against schema
+    with open(args.metaparameters_filepath) as config_file:
+        config_json = json.load(config_file)
+    with open(args.schema_filepath) as schema_file:
+        schema_json = json.load(schema_file)
+
+    # Throws a fairly descriptive error if validation fails.
+    jsonschema.validate(instance=config_json, schema=schema_json)
+
+    model = prepare_model(args.model_filepath, args.device)
+    mitigation = prepare_mitigation(args, config_json)
+    dataset = prepare_dataset(args.dataset_dirpath, split_name='test')
+
+    results = test_model(model, mitigation, dataset, args.batch_size, args.num_workers, args.device)
+    with open(os.path.join(args.output_dirpath, "results.json"), 'w+') as f:
+        json.dump(results, f)
+
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser(description='Parser for mitigation round, with two modes of operation, mitigate and test')
+
+    parser.set_defaults(func=lambda args: parser.print_help())
+
+    subparser = parser.add_subparsers(dest='cmd', required=True)
+
+    mitigate_parser = subparser.add_parser('mitigate', help='Generates a mitigated model')
+
+    # Mitigation arguments
+    mitigate_parser.add_argument("--metaparameters_filepath", type=str, required=True, help="Path JSON file containing values of tunable parameters based on json schema")
+    mitigate_parser.add_argument("--schema_filepath", type=str, help="Path to a schema file in JSON Schema format against which to validate the metaparameters file.", required=True)
+    mitigate_parser.add_argument('--model_filepath', type=str, default="./model.pt", help="File path to the model that will be mitigated")
+    mitigate_parser.add_argument('--dataset_dirpath', type=str, help="A dataset of examples to train the mitigated model with.", required=True)
+    mitigate_parser.add_argument('--output_dirpath', type=str, default="./out", help="The directory path to where the output will be dumped")
+    mitigate_parser.add_argument('--model_output_name', type=str, default="mitigated.pt", help="Name of the mitigated model that will be written to the output dirpath")
+    mitigate_parser.add_argument('--scratch_dirpath', type=str, default="./scratch", help="The directory where a scratch space is located.")
+    mitigate_parser.add_argument('--batch_size', type=int, default=32, help="The batch size that the technique would use for data loading")
+    mitigate_parser.add_argument('--device', type=str, default='cuda', help="The device to use")
+    mitigate_parser.add_argument('--num_workers', type=int, default=1, help="The number of CPU processes to use to load data")
+    mitigate_parser.add_argument("--round_training_dataset_dirpath", type=str, help="File path to the directory containing id-xxxxxxxx models of the current rounds training dataset.", default=None)
+
+    # Test arguments
+    test_parser = subparser.add_parser('test', help='Tests a mitigated model with example data')
+    test_parser.add_argument("--metaparameters_filepath", type=str, required=True, help="Path JSON file containing values of tunable parameters based on json schema")
+    test_parser.add_argument("--schema_filepath", type=str, help="Path to a schema file in JSON Schema format against which to validate the metaparameters file.", required=True)
+    test_parser.add_argument('--model_filepath', type=str, default="./model.pt", help="File path to the mitigated model that will be tested")
+    test_parser.add_argument('--dataset_dirpath', type=str, help="A dataset of examples to test the mitigated model with.", required=True)
+    test_parser.add_argument('--scratch_dirpath', type=str, default="./scratch", help="The directory where a scratch space is located.")
+    test_parser.add_argument('--output_dirpath', type=str, default="./out", help="The directory path to where the output will be dumped")
+    test_parser.add_argument('--batch_size', type=int, default=32, help="The batch size that the technique would use for data loading")
+    test_parser.add_argument('--device', type=str, default='cuda', help="The device to use")
+    test_parser.add_argument('--num_workers', type=int, default=1, help="The number of CPU processes to use to load data")
+    test_parser.add_argument("--round_training_dataset_dirpath", type=str, help="File path to the directory containing id-xxxxxxxx models of the current rounds training dataset.", default=None)
+
+    # Setup default function to call for mitigate/test
+    mitigate_parser.set_defaults(func=run_mitigate_mode)
+    test_parser.set_defaults(func=run_test_mode)
+
+    args = parser.parse_args()
+
+    # Call appropriate function
+    args.func(args)
+        
