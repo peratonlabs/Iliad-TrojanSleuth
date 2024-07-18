@@ -3,12 +3,10 @@ import json
 import jsonschema
 import torch
 from tqdm import tqdm
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-from trojai_mitigation_round.mitigations.finetuning import FineTuningTrojai
+#import numpy as np
+from trojai_mitigation_round.mitigations.dubious import DubiousTrojai
 from trojai_mitigation_round.trojai_dataset import Round11SampleDataset
-from trojai_mitigation_round.mitigations.mitigation import TrojAIMitigation
-from trojai_mitigation_round.mitigations.mitigated_model import TrojAIMitigatedModel
+
 
 def demo_training_example_data(base_training_dataset_dirpath):
     training_models_dirpath = os.path.join(base_training_dataset_dirpath, 'models')
@@ -44,61 +42,6 @@ def demo_training_example_data(base_training_dataset_dirpath):
                         example_groundtruth_dict = json.load(example_groundtruth_filepath)
                         clean_label = example_groundtruth_dict['clean_label']
 
-class FineTuningTrojai(TrojAIMitigation):
-    def __init__(self, device, batch_size=32, num_workers=1, **kwargs):
-        super().__init__(device, batch_size, num_workers, **kwargs)
-        self.device = device
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        
-    def preprocess_transform(self, x: torch.tensor):
-        """
-        This is the default preprocess of a mitigation method. If your  mitigation technique defines a preprocess transform,
-        this function will be overwritten by that. Otherwise, this default is used. 
-        
-        You may change the batch size to allow for data augmentations being queries as multiple 
-        points. Additionally, any additional information required to post process the results back to one prediction per original data point acn be passed as an additional dictionary
-
-        Args
-            x: torch:tensor shape: (batch_size, channels, height, width) corresponding to input data of size . Will be on device: 'cpu'
-
-        Returns:
-            x: torch tensor corresponding to input data of size (intermediary_batch_size, channels, height, width). 
-            info: dictionary corresponding to metadata that needs to be passed to post process
-    
-        """
-        x[:,0,:,:] = 1
-        return x, {}
-
-    def postprocess_transform(self, logits: torch.tensor, info: dict):
-        """
-        This is the default postprocess of a mitigation method. If your mitigation technique defines a postprocess transform, this
-        function will be overwritten by that. Otherwise, this default is used.
-
-        If you abstracted preprocess_data to change the batch_size to the model, you must abstract this function to return the logits to the same batch size as
-        the original queried model
-
-        Args 
-            logits: torch:tensor shape: (intermediary_batch_size, num_classes) corresponding to the logits of the inpu data
-            info: dictionary corresponding to metadata passed from preprocess
-
-        Returns:
-            logits : torch:tensor shape: (batch_size, num_classes) corresponding to the logits for original batch of data
-        """
-        return logits
-
-
-    def mitigate_model(self, model: torch.nn.Module, dataset: Dataset) -> TrojAIMitigatedModel:
-        """
-        Args:
-            model: the model to repair
-            dataset: a dataset of examples
-        Returns:
-            mitigated_model: A TrojAIMitigatedModel object corresponding to new model weights and a pre/post processing techniques
-        """
-        model = model.to(self.device)
-        return TrojAIMitigatedModel(model)
-
 
 def prepare_mitigation(args, config_json):
     """Given the command line args, construct and return a subclass of the TrojaiMitigation class
@@ -120,7 +63,7 @@ def prepare_mitigation(args, config_json):
     #     os.makedirs(ckpt_dirpath, exist_ok=True)
 
     # Construct defense with args
-    mitigation = FineTuningTrojai(
+    mitigation = DubiousTrojai(
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         device=args.device,
@@ -141,7 +84,7 @@ def prepare_model(path, device):
 
 
 def prepare_dataset(dataset_path, split_name):
-    dataset = Round11SampleDataset(root=dataset_path, split=split_name, require_label=True)
+    dataset = Round11SampleDataset(root=dataset_path, split=split_name, require_label=False)
     return dataset
 
 
@@ -189,15 +132,15 @@ def test_model(model, mitigation, testset, batch_size, num_workers, device):
         all_labels = torch.cat([all_labels, y], axis=0)
         all_fnames.extend(fname)
     
-    # fname_to_logits = dict(zip(all_fnames, all_logits.tolist()))
+    fname_to_logits = dict(zip(all_fnames, all_logits.tolist()))
 
-    # return fname_to_logits
+    return fname_to_logits
     
-    output = dict()
-    output['pred_logits'] = all_logits.tolist()
-    output['labels'] = all_labels.tolist()
+    #output = dict()
+    #output['pred_logits'] = all_logits.tolist()
+    #output['labels'] = all_labels.tolist()
     
-    return output
+    #return output
 
 # Executes in mitigate mode, generating an approach to mitigate the model
 def run_mitigate_mode(args):
