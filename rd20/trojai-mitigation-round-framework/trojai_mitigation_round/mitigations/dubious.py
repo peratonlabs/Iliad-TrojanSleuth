@@ -15,7 +15,7 @@ class DubiousTrojai(TrojAIMitigation):
         super().__init__(device, batch_size, num_workers, **kwargs)
         
     def preprocess_transform(self, x: torch.tensor):
-        x[:,0,:,:] = 1
+        x[:,0,:,:] += 0.5
         return x, {}
     
     def get_signature(X_test, y_test, num_examples, model_type, model_pt, drop_rates, num_perturb, perturbation_type, target_class, additional_args, data_type):

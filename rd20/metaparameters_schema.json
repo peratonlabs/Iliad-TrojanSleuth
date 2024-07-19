@@ -3,7 +3,7 @@
     "title": "Peraton Mitigation Container",
     "technique": "Input Cleaning",
     "technique_description": "Apply a red filter over the input",
-    "technique_changes": "Fixed testing bug",
+    "technique_changes": "Add 0.5 to pixel values of the red channel",
     "technique_type": ["Input Cleaning"],
     "commit_id": "",
     "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd20",
