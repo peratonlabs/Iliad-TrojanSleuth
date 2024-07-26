@@ -2,7 +2,7 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "Peraton Mitigation Container",
     "technique": "Input Cleaning",
-    "technique_description": "Add 0.5 to pixel values of the red channel",
+    "technique_description": "Select optimal perturbation based on misclassification and confidence",
     "technique_changes": "Fixed testing bug",
     "technique_type": ["Input Cleaning"],
     "commit_id": "",
