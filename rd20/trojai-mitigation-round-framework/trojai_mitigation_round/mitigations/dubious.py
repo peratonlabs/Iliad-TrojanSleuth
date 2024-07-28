@@ -56,7 +56,7 @@ class DubiousTrojai(TrojAIMitigation):
         parameter1_values = [0,1,2]
         parameter2_values = [-0.7,-0.5,-0.3,0.3,0.5,0.7]
         greatest_metric = 0
-        best_params = (100, 100, 100)
+        best_params = (0, 0)
         for transform_i in range(len(transforms)):
             transform = transforms[transform_i]
             for parameter_i1 in parameter1_values:
@@ -80,7 +80,7 @@ class DubiousTrojai(TrojAIMitigation):
         final_x = torch.tensor([])
         for i in range(x.shape[0]):
             img = x[i:i+1]
-            img = transform(img, parameter_i1, parameter_i2)#, parameter_i3)
+            img = transform(img, best_params[0], best_params[1])#, parameter_i3)
             final_x = torch.cat([final_x, img], axis=0)
         #print(x.shape)
         # new_x = torch.tensor([])

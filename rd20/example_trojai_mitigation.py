@@ -67,6 +67,8 @@ def prepare_mitigation(args, config_json):
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         device=args.device,
+        scratch_dirpath=args.scratch_dirpath,
+        model_filepath=args.model_filepath
     )
     return mitigation
 
