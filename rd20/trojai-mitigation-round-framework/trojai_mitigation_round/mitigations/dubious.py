@@ -22,10 +22,10 @@ class DubiousTrojai(TrojAIMitigation):
     def __init__(self, device, batch_size=32, num_workers=1, **kwargs):
         super().__init__(device, batch_size, num_workers, **kwargs)
         
-    def preprocess_transform(self, x: torch.tensor, y: torch.tensor):
-        model_filepath=self.model_filepath
-        model = torch.load(model_filepath)
-        model = model.to(device=self.device)
+    def preprocess_transform(self, x: torch.tensor, y: torch.tensor, model):
+        #model_filepath=self.model_filepath
+        #model = torch.load(model_filepath)
+        #model = model.to(device=self.device)
         
         softmax = torch.nn.Softmax(dim=1)
         transforms = [self.g]

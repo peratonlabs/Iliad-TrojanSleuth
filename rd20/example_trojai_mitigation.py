@@ -126,7 +126,7 @@ def test_model(model, mitigation, testset, batch_size, num_workers, device):
     
     # Label could be None in case the dataset did not require it to load
     for x, y, fname in tqdm(dataloader):
-        preprocess_x, info = mitigation.preprocess_transform(x, y)
+        preprocess_x, info = mitigation.preprocess_transform(x, y, model)
         output_logits = model(preprocess_x.to(device)).detach().cpu()
         final_logits = mitigation.postprocess_transform(output_logits.detach().cpu(), info)
 
