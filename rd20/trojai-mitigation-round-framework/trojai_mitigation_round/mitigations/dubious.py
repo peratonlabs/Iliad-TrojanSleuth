@@ -1,6 +1,7 @@
 import os
 from typing import Dict
 from pathlib import Path
+import copy
 
 import torchvision
 from torchvision.utils import save_image
@@ -10,8 +11,8 @@ import torch
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import wand
-import wand.image
+#import wand
+#import wand.image
 from PIL import Image
 import numpy as np
 
@@ -23,9 +24,9 @@ class DubiousTrojai(TrojAIMitigation):
         super().__init__(device, batch_size, num_workers, **kwargs)
         
     def preprocess_transform(self, x: torch.tensor, y: torch.tensor, model):
-        #model_filepath=self.model_filepath
-        #model = torch.load(model_filepath)
-        #model = model.to(device=self.device)
+        # model_filepath=self.model_filepath
+        # model = torch.load(model_filepath)
+        # model = model.to(device=self.device)
         
         softmax = torch.nn.Softmax(dim=1)
         transforms = [self.g]
@@ -53,10 +54,11 @@ class DubiousTrojai(TrojAIMitigation):
         #                     greatest_metric = metric
         #                     best_params = (parameter_i1, parameter_i2, parameter_i3)
         transforms = [self.f]
+        #transform = self.f
         parameter1_values = [0,1,2]
-        parameter2_values = [-0.7,-0.5,-0.3,0.3,0.5,0.7]
+        parameter2_values = [-0.3,-0.1,0.1,0.3]
         greatest_metric = 0
-        best_params = (0, 0)
+        best_params = (0, 0)                 
         for transform_i in range(len(transforms)):
             transform = transforms[transform_i]
             for parameter_i1 in parameter1_values:
@@ -64,7 +66,7 @@ class DubiousTrojai(TrojAIMitigation):
                     #print(parameter_i1, parameter_i2)
                     new_x = torch.tensor([])
                     for i in range(x.shape[0]):
-                        img = x[i:i+1]
+                        img = copy.deepcopy(x[i:i+1])
                         img = transform(img, parameter_i1, parameter_i2)
                         new_x = torch.cat([new_x, img], axis=0)
             
@@ -76,12 +78,18 @@ class DubiousTrojai(TrojAIMitigation):
                     if metric > greatest_metric:
                         greatest_metric = metric
                         best_params = (parameter_i1, parameter_i2)
+              
         #print(best_params, greatest_metric)
         final_x = torch.tensor([])
         for i in range(x.shape[0]):
-            img = x[i:i+1]
+            img = copy.deepcopy(x[i:i+1])
             img = transform(img, best_params[0], best_params[1])#, parameter_i3)
             final_x = torch.cat([final_x, img], axis=0)
+        logits = model(final_x.to(self.device)).detach().cpu()
+        #print("Mean: ", torch.mean(logits))
+        probs = softmax(logits)
+        #print(torch.argmax(logits, dim=1), y)
+        #print(torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0], torch.mean(torch.max(probs, dim=1)[0]))
         #print(x.shape)
         # new_x = torch.tensor([])
         # for i in range(x.shape[0]):
@@ -129,7 +137,7 @@ class DubiousTrojai(TrojAIMitigation):
         return x
     
     def f(self, x, index, addition):
-        x[:,index,:,:] += addition
+        x[:,index,:,:] = x[:,index,:,:] + addition
         return x
     
     def g(self, x, p1, p2, p3):
@@ -345,47 +353,47 @@ class DubiousTrojai(TrojAIMitigation):
         return TrojAIMitigatedModel(model, custom_preprocess=self.preprocess_transform)
     
 
-    def colortone(self, image: wand.image.Image, color: str, dst_percent: int, invert: bool) -> None:
-        """
-        tones either white or black values in image to the provided color,
-        intensity of toning depends on dst_percent
-        :param image: provided image
-        :param color: color to tone image
-        :param dst_percent: percentage of image pixel value to include when blending with provided color,
-        0 is unchanged, 100 is completely colored in
-        :param invert: if True blacks are modified, if False whites are modified
-        :return:
-        """
-        mask_src = image.clone()
-        mask_src.colorspace = 'gray'
-        if invert:
-            mask_src.negate()
-        mask_src.alpha_channel = 'copy'
+    # def colortone(self, image: wand.image.Image, color: str, dst_percent: int, invert: bool) -> None:
+    #     """
+    #     tones either white or black values in image to the provided color,
+    #     intensity of toning depends on dst_percent
+    #     :param image: provided image
+    #     :param color: color to tone image
+    #     :param dst_percent: percentage of image pixel value to include when blending with provided color,
+    #     0 is unchanged, 100 is completely colored in
+    #     :param invert: if True blacks are modified, if False whites are modified
+    #     :return:
+    #     """
+    #     mask_src = image.clone()
+    #     mask_src.colorspace = 'gray'
+    #     if invert:
+    #         mask_src.negate()
+    #     mask_src.alpha_channel = 'copy'
 
-        src = image.clone()
-        src.colorize(wand.color.Color(color), wand.color.Color('#FFFFFF'))
-        src.composite_channel('alpha', mask_src, 'copy_alpha')
+    #     src = image.clone()
+    #     src.colorize(wand.color.Color(color), wand.color.Color('#FFFFFF'))
+    #     src.composite_channel('alpha', mask_src, 'copy_alpha')
 
-        image.composite_channel('default_channels', src, 'blend',
-                        arguments=str(dst_percent) + "," + str(100 - dst_percent))
-        return image
+    #     image.composite_channel('default_channels', src, 'blend',
+    #                     arguments=str(dst_percent) + "," + str(100 - dst_percent))
+    #     return image
 
-    def vignette(self, image: wand.image.Image, color_1: str = 'none', color_2: str = 'black',
-            crop_factor: float = 1.5) -> None:
-        """
-        applies fading from color_1 to color_2 in radial gradient pattern on given image
-        :param image: provided image
-        :param color_1: center color
-        :param color_2: edge color
-        :param crop_factor: size of radial gradient pattern, which is then cropped and combined with image,
-        larger values include more of color_1, smaller values include more of color_2
-        :return: None
-        """
-        crop_x = math.floor(image.width * crop_factor)
-        crop_y = math.floor(image.height * crop_factor)
-        src = wand.image.Image()
-        src.pseudo(width=crop_x, height=crop_y, pseudo='radial-gradient:' + color_1 + '-' + color_2)
-        src.crop(0, 0, width=image.width, height=image.height, gravity='center')
-        src.reset_coords()
-        image.composite_channel('default_channels', src, 'multiply')
-        image.merge_layers('flatten')
+    # def vignette(self, image: wand.image.Image, color_1: str = 'none', color_2: str = 'black',
+    #         crop_factor: float = 1.5) -> None:
+    #     """
+    #     applies fading from color_1 to color_2 in radial gradient pattern on given image
+    #     :param image: provided image
+    #     :param color_1: center color
+    #     :param color_2: edge color
+    #     :param crop_factor: size of radial gradient pattern, which is then cropped and combined with image,
+    #     larger values include more of color_1, smaller values include more of color_2
+    #     :return: None
+    #     """
+    #     crop_x = math.floor(image.width * crop_factor)
+    #     crop_y = math.floor(image.height * crop_factor)
+    #     src = wand.image.Image()
+    #     src.pseudo(width=crop_x, height=crop_y, pseudo='radial-gradient:' + color_1 + '-' + color_2)
+    #     src.crop(0, 0, width=image.width, height=image.height, gravity='center')
+    #     src.reset_coords()
+    #     image.composite_channel('default_channels', src, 'multiply')
+    #     image.merge_layers('flatten')
