@@ -57,37 +57,40 @@ class DubiousTrojai(TrojAIMitigation):
         #transform = self.f
         parameter1_values = [0,1,2]
         parameter2_values = [-0.3,-0.1,0.1,0.3]
+        parameter3_values = [True, False]
         greatest_metric = 0
-        best_params = (0, 0)                 
+        best_params = (0, 0, 0)                 
         for transform_i in range(len(transforms)):
             transform = transforms[transform_i]
             for parameter_i1 in parameter1_values:
                 for parameter_i2 in parameter2_values:
+                    for parameter_i3 in parameter3_values:
                     #print(parameter_i1, parameter_i2)
-                    new_x = torch.tensor([])
-                    for i in range(x.shape[0]):
-                        img = copy.deepcopy(x[i:i+1])
-                        img = transform(img, parameter_i1, parameter_i2)
-                        new_x = torch.cat([new_x, img], axis=0)
-            
-                    logits = model(new_x.to(self.device)).detach().cpu()
-                    probs = softmax(logits)
-                    #print(torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0], torch.mean(torch.max(probs, dim=1)[0]))
-                    metric = torch.mean(torch.max(probs, dim=1)[0]) - (torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0])
-                    #print(metric)
-                    if metric > greatest_metric:
-                        greatest_metric = metric
-                        best_params = (parameter_i1, parameter_i2)
+                        new_x = torch.tensor([])
+                        for i in range(x.shape[0]):
+                            img = copy.deepcopy(x[i:i+1])
+                            img = transform(img, parameter_i1, parameter_i2, parameter_i3)
+                            new_x = torch.cat([new_x, img], axis=0)
+                
+                        logits = model(new_x.to(self.device)).detach().cpu()
+                        probs = softmax(logits)
+                        #print(torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0], torch.mean(torch.max(probs, dim=1)[0]))
+                        metric = torch.mean(torch.max(probs, dim=1)[0]) - (torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0])
+                        #print(metric)
+                        if metric > greatest_metric:
+                            greatest_metric = metric
+                            best_params = (parameter_i1, parameter_i2, parameter_i3)
               
         #print(best_params, greatest_metric)
         final_x = torch.tensor([])
         for i in range(x.shape[0]):
             img = copy.deepcopy(x[i:i+1])
-            img = transform(img, best_params[0], best_params[1])#, parameter_i3)
+            if greatest_metric > 0.55:
+                img = transform(img, best_params[0], best_params[1], best_params[2])#, parameter_i3)
             final_x = torch.cat([final_x, img], axis=0)
-        logits = model(final_x.to(self.device)).detach().cpu()
+        #logits = model(final_x.to(self.device)).detach().cpu()
         #print("Mean: ", torch.mean(logits))
-        probs = softmax(logits)
+        #probs = softmax(logits)
         #print(torch.argmax(logits, dim=1), y)
         #print(torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0], torch.mean(torch.max(probs, dim=1)[0]))
         #print(x.shape)
@@ -136,8 +139,11 @@ class DubiousTrojai(TrojAIMitigation):
         x[:,2,:,:] += 0.5
         return x
     
-    def f(self, x, index, addition):
-        x[:,index,:,:] = x[:,index,:,:] + addition
+    def f(self, x, index, addition, set_value):
+        if set_value:
+            x[:,index,:,:] = addition
+        else:
+            x[:,index,:,:] = x[:,index,:,:] + addition
         return x
     
     def g(self, x, p1, p2, p3):
