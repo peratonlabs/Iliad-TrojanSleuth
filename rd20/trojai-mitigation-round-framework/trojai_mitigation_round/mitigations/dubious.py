@@ -23,10 +23,11 @@ class DubiousTrojai(TrojAIMitigation):
     def __init__(self, device, batch_size=32, num_workers=1, **kwargs):
         super().__init__(device, batch_size, num_workers, **kwargs)
         
-    def preprocess_transform(self, x: torch.tensor, y: torch.tensor, model):
+    def preprocess_transform(self, x: torch.tensor, model):
         # model_filepath=self.model_filepath
         # model = torch.load(model_filepath)
         # model = model.to(device=self.device)
+        y = torch.argmax(model(x.to(self.device)), dim=1)
         
         softmax = torch.nn.Softmax(dim=1)
         transforms = [self.g]
@@ -56,8 +57,8 @@ class DubiousTrojai(TrojAIMitigation):
         transforms = [self.f]
         #transform = self.f
         parameter1_values = [0,1,2]
-        parameter2_values = [-0.3,-0.1,0.1,0.3]
-        parameter3_values = [True, False]
+        parameter2_values = [-0.5,-0.3,-0.1,0.1,0.3,0.5]
+        parameter3_values = [False]
         greatest_metric = 0
         best_params = (0, 0, 0)                 
         for transform_i in range(len(transforms)):
@@ -75,7 +76,7 @@ class DubiousTrojai(TrojAIMitigation):
                         logits = model(new_x.to(self.device)).detach().cpu()
                         probs = softmax(logits)
                         #print(torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0], torch.mean(torch.max(probs, dim=1)[0]))
-                        metric = torch.mean(torch.max(probs, dim=1)[0]) - (torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0])
+                        metric = torch.mean(torch.max(probs, dim=1)[0]) - (torch.sum(y.cpu() == torch.argmax(logits, dim=1)) / logits.shape[0])
                         #print(metric)
                         if metric > greatest_metric:
                             greatest_metric = metric
@@ -85,8 +86,8 @@ class DubiousTrojai(TrojAIMitigation):
         final_x = torch.tensor([])
         for i in range(x.shape[0]):
             img = copy.deepcopy(x[i:i+1])
-            if greatest_metric > 0.55:
-                img = transform(img, best_params[0], best_params[1], best_params[2])#, parameter_i3)
+            #if greatest_metric > 0.55:
+            img = transform(img, best_params[0], best_params[1], best_params[2])#, parameter_i3)
             final_x = torch.cat([final_x, img], axis=0)
         #logits = model(final_x.to(self.device)).detach().cpu()
         #print("Mean: ", torch.mean(logits))

@@ -126,7 +126,7 @@ def test_model(model, mitigation, testset, batch_size, num_workers, device):
     
     # Label could be None in case the dataset did not require it to load
     for x, y, fname in tqdm(dataloader):
-        preprocess_x, info = mitigation.preprocess_transform(x, y, model)
+        preprocess_x, info = mitigation.preprocess_transform(x, model)
         output_logits = model(preprocess_x.to(device)).detach().cpu()
         final_logits = mitigation.postprocess_transform(output_logits.detach().cpu(), info)
 
@@ -206,7 +206,7 @@ if __name__ == "__main__":
     mitigate_parser.add_argument('--output_dirpath', type=str, default="./out", help="The directory path to where the output will be dumped")
     mitigate_parser.add_argument('--model_output_name', type=str, default="mitigated.pt", help="Name of the mitigated model that will be written to the output dirpath")
     mitigate_parser.add_argument('--scratch_dirpath', type=str, default="./scratch", help="The directory where a scratch space is located.")
-    mitigate_parser.add_argument('--batch_size', type=int, default=32, help="The batch size that the technique would use for data loading")
+    mitigate_parser.add_argument('--batch_size', type=int, default=1, help="The batch size that the technique would use for data loading")
     mitigate_parser.add_argument('--device', type=str, default='cuda', help="The device to use")
     mitigate_parser.add_argument('--num_workers', type=int, default=1, help="The number of CPU processes to use to load data")
     mitigate_parser.add_argument("--round_training_dataset_dirpath", type=str, help="File path to the directory containing id-xxxxxxxx models of the current rounds training dataset.", default=None)
@@ -219,7 +219,7 @@ if __name__ == "__main__":
     test_parser.add_argument('--dataset_dirpath', type=str, help="A dataset of examples to test the mitigated model with.", required=True)
     test_parser.add_argument('--scratch_dirpath', type=str, default="./scratch", help="The directory where a scratch space is located.")
     test_parser.add_argument('--output_dirpath', type=str, default="./out", help="The directory path to where the output will be dumped")
-    test_parser.add_argument('--batch_size', type=int, default=32, help="The batch size that the technique would use for data loading")
+    test_parser.add_argument('--batch_size', type=int, default=1, help="The batch size that the technique would use for data loading")
     test_parser.add_argument('--device', type=str, default='cuda', help="The device to use")
     test_parser.add_argument('--num_workers', type=int, default=1, help="The number of CPU processes to use to load data")
     test_parser.add_argument("--round_training_dataset_dirpath", type=str, help="File path to the directory containing id-xxxxxxxx models of the current rounds training dataset.", default=None)
