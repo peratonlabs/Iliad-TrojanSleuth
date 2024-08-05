@@ -86,8 +86,8 @@ class DubiousTrojai(TrojAIMitigation):
         final_x = torch.tensor([])
         for i in range(x.shape[0]):
             img = copy.deepcopy(x[i:i+1])
-            #if greatest_metric > 0.55:
-            img = transform(img, best_params[0], best_params[1], best_params[2])#, parameter_i3)
+            if greatest_metric > 0.55:
+                img = transform(img, best_params[0], best_params[1], best_params[2])
             final_x = torch.cat([final_x, img], axis=0)
         #logits = model(final_x.to(self.device)).detach().cpu()
         #print("Mean: ", torch.mean(logits))

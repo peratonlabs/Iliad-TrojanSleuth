@@ -125,10 +125,13 @@ def test_model(model, mitigation, testset, batch_size, num_workers, device):
     all_fnames = []
     
     # Label could be None in case the dataset did not require it to load
+    #softmax = torch.nn.Softmax(dim=1)
     for x, y, fname in tqdm(dataloader):
         preprocess_x, info = mitigation.preprocess_transform(x, model)
         output_logits = model(preprocess_x.to(device)).detach().cpu()
         final_logits = mitigation.postprocess_transform(output_logits.detach().cpu(), info)
+        #probs = softmax(final_logits)
+        #print(torch.sum(y == torch.argmax(final_logits, dim=1)) / final_logits.shape[0], torch.mean(torch.max(probs, dim=1)[0]))
 
         all_logits = torch.cat([all_logits, final_logits], axis=0)
         all_labels = torch.cat([all_labels, y], axis=0)
@@ -136,13 +139,13 @@ def test_model(model, mitigation, testset, batch_size, num_workers, device):
     
     fname_to_logits = dict(zip(all_fnames, all_logits.tolist()))
 
-    return fname_to_logits
+    #return fname_to_logits
+    #print("Mean: ", torch.mean(all_logits))
+    output = dict()
+    output['pred_logits'] = all_logits.tolist()
+    output['labels'] = all_labels.tolist()
     
-    #output = dict()
-    #output['pred_logits'] = all_logits.tolist()
-    #output['labels'] = all_labels.tolist()
-    
-    #return output
+    return output
 
 # Executes in mitigate mode, generating an approach to mitigate the model
 def run_mitigate_mode(args):
