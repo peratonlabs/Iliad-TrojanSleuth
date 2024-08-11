@@ -139,13 +139,13 @@ def test_model(model, mitigation, testset, batch_size, num_workers, device):
     
     fname_to_logits = dict(zip(all_fnames, all_logits.tolist()))
 
-    #return fname_to_logits
+    return fname_to_logits
     #print("Mean: ", torch.mean(all_logits))
-    output = dict()
-    output['pred_logits'] = all_logits.tolist()
-    output['labels'] = all_labels.tolist()
+    #output = dict()
+    #output['pred_logits'] = all_logits.tolist()
+    #output['labels'] = all_labels.tolist()
     
-    return output
+    #return output
 
 # Executes in mitigate mode, generating an approach to mitigate the model
 def run_mitigate_mode(args):
