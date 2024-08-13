@@ -63,7 +63,7 @@ class DubiousTrojai(TrojAIMitigation):
         
         transforms = [self.filter_rect]
         #transform = self.f
-        parameter1_values = [0,1,2]
+        parameter1_values = [0]#,1,2]
         parameter2_values = [0]#list(range(0,255,64))
         parameter3_values = [0]#list(range(0,255,64))
         parameter4_values = [-0.5,-0.1,0.1,0.5]
