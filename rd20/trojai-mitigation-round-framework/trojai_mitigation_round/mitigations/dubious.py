@@ -31,99 +31,74 @@ class DubiousTrojai(TrojAIMitigation):
         # model = torch.load(model_filepath)
         # model = model.to(device=self.device)
         
-        model_poison_prediction = self.trojan_detector(model, self.device)
-        if model_poison_prediction == False:
-            return x, {}
+        #model_poison_prediction = self.trojan_detector(model, self.device)
+        #if model_poison_prediction == False:
+        #    return x, {}
         y = torch.argmax(model(x.to(self.device)), dim=1)
-        
         softmax = torch.nn.Softmax(dim=1)
-        # transforms = [self.instagram]
-        # parameter_values = [50,100]#[5, 25, 50, 100]
-        # greatest_metric = 0
-        # best_params = (100, 100, 100)
-        # for transform_i in range(len(transforms)):
-        #     transform = transforms[transform_i]
-        #     for parameter_i1 in parameter_values:
-        #         for parameter_i2 in parameter_values:
-        #             for parameter_i3 in parameter_values:
-        #                 #print(parameter_i1, parameter_i2, parameter_i3)
-        #                 new_x = torch.tensor([])
-        #                 for i in range(x.shape[0]):
-        #                     img = copy.deepcopy(x[i:i+1])
-        #                     img = transform(img, parameter_i1, parameter_i2, parameter_i3)
-        #                     new_x = torch.cat([new_x, img], axis=0)
                 
-        #                 logits = model(new_x.to(self.device)).detach().cpu()
-        #                 probs = softmax(logits)
-        #                 #print(torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0], torch.mean(torch.max(probs, dim=1)[0]))
-        #                 metric = torch.mean(torch.max(probs, dim=1)[0]) - (torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0])
-        #                 #print(metric)
-        #                 if metric > greatest_metric:
-        #                     greatest_metric = metric
-        #                     best_params = (parameter_i1, parameter_i2, parameter_i3)
-        transform = self.control
-        new_x = torch.tensor([])
-        for i in range(x.shape[0]):
-            img = copy.deepcopy(x[i:i+1])
-            img = transform(img)
-            new_x = torch.cat([new_x, img], axis=0)
-        logits = model(new_x.to(self.device)).detach().cpu()
-        pred_class = torch.argmax(logits)
-        #print(pred_class, y)
+        dubious = joblib.load("/dubious-50-blur-perturb50-eval.joblib")
         
-        dubious = joblib.load("/dubious-10.joblib")
-        
-        transforms = [self.filter_rect]
+        #transforms = [self.filter_rect]
+        transforms = [self.blur]
         #transform = self.f
-        parameter1_values = [0,1,2]
+        parameter1_values = [0.1,0.2,0.3,0.5,0.7,1,1.2,1.5,2]#[0,1,2]
         parameter2_values = [0]#list(range(0,255,64))
         parameter3_values = [0]#list(range(0,255,64))
-        parameter4_values = [-0.5,-0.1,0.1,0.5]
+        parameter4_values = [0]#[-0.5,-0.1,0.1,0.5]#[-0.5,-0.1,0.1,0.5]
         parameter5_values = [False]
 
         greatest_metric = 0
         best_params = (0, 0, 0, 0, 0)
+        num_perturb = 10
         logit_list = []
         total = 0.0
         correct = 0.0
         for transform_i in range(len(transforms)):
             transform = transforms[transform_i]
-            for parameter_i1 in parameter1_values:
-                for parameter_i2 in parameter2_values:
-                    for parameter_i3 in parameter3_values:
-                        for parameter_i4 in parameter4_values:
-                            for parameter_i5 in parameter5_values:
-                                #print(parameter_i1, parameter_i2, parameter_i3, parameter_i4, parameter_i5)
-                                new_x = torch.tensor([])
-                                for i in range(x.shape[0]):
-                                    img = copy.deepcopy(x[i:i+1])
-                                    img = transform(img, parameter_i1, parameter_i2, parameter_i3, parameter_i4, parameter_i5)
-                                    new_x = torch.cat([new_x, img], axis=0)
-                                logits = model(new_x.to(self.device)).detach().cpu()
-                                probs = softmax(logits)
-                                pred_class = torch.argmax(logits)
-                                #print(pred_class, y)
-                                total += 1
-                                if pred_class == y[0]:
-                                    correct += 1
-                                logit_list.append(logits[0,pred_class].numpy())
-                                #print(torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0], torch.mean(torch.max(probs, dim=1)[0]))
-                                metric = torch.mean(torch.max(probs, dim=1)[0]) - (torch.sum(y.cpu() == torch.argmax(logits, dim=1)) / logits.shape[0])
-                                #print(metric)
-                                if metric > greatest_metric:
-                                    greatest_metric = metric
-                                    best_params = (parameter_i1, parameter_i2, parameter_i3, parameter_i4, parameter_i5)
+            for _ in range(num_perturb):
+                for parameter_i1 in parameter1_values:
+                    for parameter_i2 in parameter2_values:
+                        for parameter_i3 in parameter3_values:
+                            for parameter_i4 in parameter4_values:
+                                for parameter_i5 in parameter5_values:
+                                    #print(parameter_i1, parameter_i2, parameter_i3, parameter_i4, parameter_i5)
+                                    new_x = torch.tensor([])
+                                    for i in range(x.shape[0]):
+                                        img = copy.deepcopy(x[i:i+1])
+                                        img = transform(img, parameter_i1, parameter_i2, parameter_i3, parameter_i4, parameter_i5)
+                                        new_x = torch.cat([new_x, img], axis=0)
+                                    logits = model(new_x.to(self.device)).detach().cpu()
+                                    probs = softmax(logits)
+                                    pred_class = torch.argmax(logits)
+                                    #print(pred_class, y)
+                                    total += 1
+                                    if pred_class == y[0]:
+                                        correct += 1
+                                    logit_list.append(logits[0,pred_class].numpy())
+                                    #print(torch.sum(y == torch.argmax(logits, dim=1)) / logits.shape[0], torch.mean(torch.max(probs, dim=1)[0]))
+                                    #metric = torch.mean(torch.max(probs, dim=1)[0]) - (torch.sum(y.cpu() == torch.argmax(logits, dim=1)) / logits.shape[0])
+                                    # metric = torch.sum(y.cpu() != torch.argmax(logits, dim=1)) / logits.shape[0]
+                                    # #print(metric)
+                                    # if metric > greatest_metric:
+                                    #     greatest_metric = metric
+                                    #     best_params = (parameter_i1, parameter_i2, parameter_i3, parameter_i4, parameter_i5)
         #print(np.mean(logit_list), np.std(logit_list), correct / total)
         feature_vector = [[np.mean(logit_list), np.std(logit_list), correct / total]]
-        poison_prediction = dubious.predict(feature_vector)
+        #print(feature_vector)
+        poison_prediction = dubious.predict_proba(feature_vector)[0][1]
         #print(poison_prediction)
         #print(1/0)
         #print(best_params, greatest_metric)
+        transform = self.filter_rect
         final_x = torch.tensor([])
         for i in range(x.shape[0]):
             img = copy.deepcopy(x[i:i+1])
-            if poison_prediction:
-                img = transform(img, best_params[0], best_params[1], best_params[2], best_params[3], best_params[4])
+            if poison_prediction > 0.5:
+                #print("Poioson Prediction")
+                img = transform(img, best_params[0], best_params[1], best_params[2], 0.8, best_params[4])
+            else:
+                img = transform(img, best_params[0], best_params[1], best_params[2], 0.1, best_params[4])
             final_x = torch.cat([final_x, img], axis=0)
         logits = model(final_x.to(self.device)).detach().cpu()
         #print("Mean: ", torch.mean(logits))
@@ -201,6 +176,10 @@ class DubiousTrojai(TrojAIMitigation):
         img = img.reshape((1, img.shape[0], img.shape[1], img.shape[2]))
         return img
     
+    def blur(self, x, magnitude, x_index, y_index, addition, set_value):
+        x = x + torch.FloatTensor(np.random.normal(0,magnitude,x.shape))
+        return x
+    
     def int2hex(self, r,g,b):
         r = np.clip(r,0,255)
         g = np.clip(g,0,255)
@@ -262,6 +241,172 @@ class DubiousTrojai(TrojAIMitigation):
         params = torch.cat((params), dim=0)
         return params
         
+    
+    # def get_signature(X_test, y_test, num_examples, model_type, model_pt, drop_rates, num_perturb, perturbation_type, target_class, additional_args, data_type):
+    #     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    #     ratios = []
+    #     logit_values = []
+    #     logits_sds = []
+    #     use_benign_values = True
+
+    #     if data_type == "clean":
+    #         for drop_rate in drop_rates:
+
+    #             class_counts = {0:0, 1:0}
+    #             for i in range(X_test.shape[0]):
+    #                 label = y_test[i]
+    #                 if class_counts[label] >= num_examples:
+    #                     break
+    #                 #print(label, target_class)
+    #                 if label != target_class:
+    #                     continue
+
+    #                 fn = X_test[i:i+1]
+    #                 #model_input = perturb(np.copy(fn), model_type, model_pt, 0.0, use_benign_values, False, device, additional_args)
+    #                 #logits = model_pt(model_input).detach().cpu().numpy()
+    #                 logits = perturb(np.copy(fn), model_type, model_pt, 0.0, use_benign_values, False, device, additional_args, perturbation_type)
+    #                 #gradient = torch.autograd.grad(outputs=logits[0][1-label], inputs=embedding_vector, grad_outputs=torch.ones(logits[0][0].size()).to("cuda"), only_inputs=True, retain_graph=True)[0][0].cpu().numpy()
+    #                 #print(torch.argmax(logits), torch.max(logits), label)
+    #                 pred_label = np.argmax(logits)
+    #                 #print(logits, pred_label, label)
+    #                 #print(1/0)
+    #                 if (pred_label != label):
+    #                     continue
+    #                 class_counts[label] += 1
+
+    #                 correct = 0.0
+    #                 logit_list = []
+    #                 for perturbation in range(num_perturb):
+
+    #                     random.seed(i+drop_rate+perturbation)
+    #                     additional_args["perturbation"] = perturbation
+    #                     #model_input = perturb(np.copy(fn), model_type, model_pt, drop_rate, use_benign_values, True, device, additional_args)
+    #                     #logits = model_pt(model_input).detach().cpu().numpy()
+    #                     logits = perturb(np.copy(fn), model_type, model_pt, drop_rate, use_benign_values, True, device, additional_args, perturbation_type)
+    #                     logit_list.append(logits[0,pred_label])
+    #                     #print(torch.argmax(logits), pred_label)
+    #                     if (np.argmax(logits) == pred_label):
+    #                         correct += 1
+    #                 ratio = correct / num_perturb
+    #                 #print(drop_rate, "C",ratio,  np.mean(logit_list), np.std(logit_list))
+    #                 ratios.append(ratio)
+    #                 logit_values.append(np.mean(logit_list))
+    #                 logits_sds.append(np.std(logit_list))
+
+    #             #print(class_counts) 
+            
+    #     if data_type == "poisoned":    
+    #         #print(1/0)
+    #         for drop_rate in drop_rates:
+    #             #if drop_rate != 400: continue
+    #             #print(drop_rate)
+    #             class_counts = {0:0, 1:0}
+    #             for i in range(X_test.shape[0]):#-1000):
+    #                 #fn = os.path.join(examples_dirpath, "source_class_1_target_class_0_example_21.txt")
+    #                 label = y_test[i]
+    #                 if class_counts[label] >= num_examples:
+    #                     break
+    #                 fn = X_test[i:i+1]
+    #                 #model_input = perturb(np.copy(fn), model_type, model_pt, 0.0, use_benign_values, False, device, additional_args)
+    #                 #logits = model_pt(model_input).detach().cpu().numpy()
+    #                 logits = perturb(np.copy(fn), model_type, model_pt, 0.0, use_benign_values, False, device, additional_args, perturbation_type)
+    #                 #print(logits, np.argmax(logits), label)
+    #                 pred_label = np.argmax(logits)
+
+    #                 if pred_label != target_class:
+    #                     continue
+
+    #                 class_counts[label] += 1
+                    
+    #                 correct = 0.0
+    #                 logit_list = []
+    #                 for perturbation in range(num_perturb):
+
+    #                     random.seed(i+drop_rate+perturbation)
+    #                     additional_args["perturbation"] = perturbation
+    #                     #model_input = perturb(np.copy(fn), model_type, model_pt, drop_rate, use_benign_values, True, device, additional_args)
+    #                     #logits = model_pt(model_input).detach().cpu().numpy()
+    #                     logits = perturb(np.copy(fn), model_type, model_pt, drop_rate, use_benign_values, True, device, additional_args, perturbation_type)
+    #                     logit_list.append(logits[0,pred_label])
+    #                     if (np.argmax(logits) == pred_label):
+    #                         correct += 1
+    #                 ratio = correct / num_perturb
+    #                 #print(drop_rate, "T",ratio, np.mean(logit_list), np.std(logit_list))
+    #                 ratios.append(ratio)
+    #                 logit_values.append(np.mean(logit_list))
+    #                 logits_sds.append(np.std(logit_list))
+    #             #print(class_counts)  
+
+    #     num_samples = len(logit_values) // len(drop_rates)
+    #     logit_values = np.array(logit_values).reshape(num_samples, len(drop_rates))
+    #     logits_sds = np.array(logits_sds).reshape(num_samples, len(drop_rates))
+    #     ratios = np.array(ratios).reshape(num_samples, len(drop_rates))
+    #     #print(num_samples, logit_values.shape)
+        
+    #     return logit_values, logits_sds, ratios#, trojan_logits, trojan_logits_sds, trojan_ratios
+    
+    # def perturb(sample, model_pt, device, parameters, step_sizes, apply, label, magnitude):
+    #     if apply:
+    #         bounds = [100, 100]
+    #         bounds[0] = int(bounds[0] / magnitude)
+    #         bounds[1] = int(bounds[1] * magnitude)
+    #         #bounds[0] = int(bounds[0] * (1-magnitude))
+    #         #bounds[1] = int(bounds[1] * (1+magnitude))
+    #         #param1 = 100
+    #         #param2 = 100
+    #         #param3 = 100
+    #         param_i = random.randint(0,2)
+    #         if param_i == 0:
+    #             param1 = random.randint(bounds[0],bounds[1])
+    #         if param_i == 1:
+    #             param2 = random.randint(bounds[0],bounds[1])
+    #         if param_i == 2:
+    #             param3 = random.randint(bounds[0],bounds[1])
+            
+    #         param1 = random.randint(bounds[0],bounds[1])
+    #         param2 = random.randint(bounds[0],bounds[1])
+    #         param3 = random.randint(bounds[0],bounds[1])
+    #         #print(param1, param2, param3)
+            
+    #         with wand.image.Image(filename=fn) as wand_image:
+    #             img = wand_image.clone()
+    #         img.modulate(param1, param2, param3)
+    #         img = np.array(img)
+    #         r = img[:, :, 0]
+    #         g = img[:, :, 1]
+    #         b = img[:, :, 2]
+    #         #wand_img = np.stack((r, g, b), axis=2)
+    #         img = np.transpose(img, (2, 0, 1))
+    #         img = np.expand_dims(img, 0)
+    #         img = img - np.min(img)
+    #         img = img / np.max(img)
+    #         batch_data = torch.FloatTensor(img).to(device)
+
+    #         # direction = (random.randint(0,1)-0.5)*2
+    #         # parameters = parameters + step_sizes * magnitude * direction
+    #         relu = torch.nn.ReLU()
+    #         parameters[0] = relu(parameters[0])
+    #         parameters[1] = relu(parameters[1])
+    #         parameters[2] = relu(parameters[2])
+    #         parameters[9] = torch.clamp(parameters[9],0,255)
+    #         parameters[10] = torch.clamp(parameters[10],0,255)
+    #         parameters[11] = torch.clamp(parameters[11],0,255)
+
+    #     else:
+    #         img = skimage.io.imread(fn)
+    #         r = img[:, :, 0]
+    #         g = img[:, :, 1]
+    #         b = img[:, :, 2]
+    #         #img = np.stack((r, g, b), axis=2)
+    #         img = np.transpose(img, (2, 0, 1))
+    #         img = np.expand_dims(img, 0)
+    #         img = img - np.min(img)
+    #         img = img / np.max(img)
+    #         batch_data = torch.FloatTensor(img).to(device)
+        
+    #     logits = model_pt(torch.from_numpy(sample).float().to(device).reshape(1,1,28,28)).detach().cpu().numpy()
+    #     return logits
 
 
     def mitigate_model(self, model: torch.nn.Module, dataset: Dataset) -> TrojAIMitigatedModel:
@@ -276,3 +421,47 @@ class DubiousTrojai(TrojAIMitigation):
         return TrojAIMitigatedModel(model, custom_preprocess=self.preprocess_transform)
     
 
+    # def colortone(self, image: wand.image.Image, color: str, dst_percent: int, invert: bool) -> None:
+    #     """
+    #     tones either white or black values in image to the provided color,
+    #     intensity of toning depends on dst_percent
+    #     :param image: provided image
+    #     :param color: color to tone image
+    #     :param dst_percent: percentage of image pixel value to include when blending with provided color,
+    #     0 is unchanged, 100 is completely colored in
+    #     :param invert: if True blacks are modified, if False whites are modified
+    #     :return:
+    #     """
+    #     mask_src = image.clone()
+    #     mask_src.colorspace = 'gray'
+    #     if invert:
+    #         mask_src.negate()
+    #     mask_src.alpha_channel = 'copy'
+
+    #     src = image.clone()
+    #     src.colorize(wand.color.Color(color), wand.color.Color('#FFFFFF'))
+    #     src.composite_channel('alpha', mask_src, 'copy_alpha')
+
+    #     image.composite_channel('default_channels', src, 'blend',
+    #                     arguments=str(dst_percent) + "," + str(100 - dst_percent))
+    #     return image
+
+    # def vignette(self, image: wand.image.Image, color_1: str = 'none', color_2: str = 'black',
+    #         crop_factor: float = 1.5) -> None:
+    #     """
+    #     applies fading from color_1 to color_2 in radial gradient pattern on given image
+    #     :param image: provided image
+    #     :param color_1: center color
+    #     :param color_2: edge color
+    #     :param crop_factor: size of radial gradient pattern, which is then cropped and combined with image,
+    #     larger values include more of color_1, smaller values include more of color_2
+    #     :return: None
+    #     """
+    #     crop_x = math.floor(image.width * crop_factor)
+    #     crop_y = math.floor(image.height * crop_factor)
+    #     src = wand.image.Image()
+    #     src.pseudo(width=crop_x, height=crop_y, pseudo='radial-gradient:' + color_1 + '-' + color_2)
+    #     src.crop(0, 0, width=image.width, height=image.height, gravity='center')
+    #     src.reset_coords()
+    #     image.composite_channel('default_channels', src, 'multiply')
+    #     image.merge_layers('flatten')
