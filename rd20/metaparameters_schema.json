@@ -3,7 +3,7 @@
     "title": "Peraton Mitigation Container",
     "technique": "Input Cleaning",
     "technique_description": "Apply an optimal perturbation based on misclassification and confidence",
-    "technique_changes": "Apply DUBIOUS with blurring perturbations to detect poisoned samples",
+    "technique_changes": "Only apply to models predicted as poisoned",
     "technique_type": ["Input Cleaning"],
     "commit_id": "",
     "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd20",

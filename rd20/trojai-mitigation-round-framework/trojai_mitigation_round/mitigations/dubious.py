@@ -32,8 +32,8 @@ class DubiousTrojai(TrojAIMitigation):
         # model = model.to(device=self.device)
         
         #model_poison_prediction = self.trojan_detector(model, self.device)
-        #if model_poison_prediction == False:
-        #    return x, {}
+        if model_poison_prediction == False:
+            return x, {}
         y = torch.argmax(model(x.to(self.device)), dim=1)
         softmax = torch.nn.Softmax(dim=1)
                 
