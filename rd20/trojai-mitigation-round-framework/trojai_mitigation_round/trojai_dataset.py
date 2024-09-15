@@ -49,7 +49,8 @@ class Round11SampleDataset(Dataset):
 
             pil_img = Image.open(full_path)
             self.fnames.append(img_fname.name)
-            self.data.append((pil_img, label))
+            self.data.append((self.transform(pil_img), label))
+            pil_img.close()
 
 
     def __len__(self):
@@ -59,5 +60,4 @@ class Round11SampleDataset(Dataset):
         img, label = self.data[idx]
         fname = self.fnames[idx]
 
-        img = self.transform(img)
         return img, label, fname
