@@ -94,7 +94,7 @@ class DubiousTrojai(TrojAIMitigation):
         final_x = torch.tensor([])
         for i in range(x.shape[0]):
             img = copy.deepcopy(x[i:i+1])
-            if poison_prediction > 0.5:
+            if poison_prediction > 0.25:
                 #print("Poioson Prediction")
                 img = transform(img, 0, best_params[1], best_params[2], 0.8, best_params[4])
                 img = transform(img, 1, best_params[1], best_params[2], 0.8, best_params[4])
