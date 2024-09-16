@@ -3,7 +3,7 @@
     "title": "Peraton Mitigation Container",
     "technique": "Input Cleaning",
     "technique_description": "Apply an optimal perturbation based on misclassification and confidence",
-    "technique_changes": "Decreased poison prediction threshold to 0.25",
+    "technique_changes": "Increased poison prediction threshold to 0.5, set red channel to 1",
     "technique_type": ["Input Cleaning"],
     "commit_id": "",
     "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd20",

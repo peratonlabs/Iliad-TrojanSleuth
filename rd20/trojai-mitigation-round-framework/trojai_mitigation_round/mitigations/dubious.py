@@ -31,7 +31,7 @@ class DubiousTrojai(TrojAIMitigation):
         # model = torch.load(model_filepath)
         # model = model.to(device=self.device)
         
-        #model_poison_prediction = self.trojan_detector(model, self.device)
+        model_poison_prediction = self.trojan_detector(model, self.device)
         if model_poison_prediction == False:
             return x, {}
         y = torch.argmax(model(x.to(self.device)), dim=1)
@@ -94,11 +94,9 @@ class DubiousTrojai(TrojAIMitigation):
         final_x = torch.tensor([])
         for i in range(x.shape[0]):
             img = copy.deepcopy(x[i:i+1])
-            if poison_prediction > 0.25:
+            if poison_prediction > 0.5:
                 #print("Poioson Prediction")
-                img = transform(img, 0, best_params[1], best_params[2], 0.8, best_params[4])
-                img = transform(img, 1, best_params[1], best_params[2], 0.8, best_params[4])
-                img = transform(img, 2, best_params[1], best_params[2], 0.8, best_params[4])
+                img = transform(img, 0, best_params[1], best_params[2], 1.0, 1)
             else:
                 img = transform(img, best_params[0], best_params[1], best_params[2], 0.1, best_params[4])
             final_x = torch.cat([final_x, img], axis=0)
