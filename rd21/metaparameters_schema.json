@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Peraton Trojan Detection Container",
+  "technique": "Weight Analysis",
+  "technique_description": "Extracts model weights and trains a random forest classifier.",
+  "technique_changes": "Initial submission",
+  "technique_type": ["Weight Analysis"],
+  "commit_id": "",
+  "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd20",
+  "required": [],
+  "additionalProperties": false,
+  "type": "object",
+  "properties": {
+	"num_features": {
+		"description": "Number of parameters to train classifier on.",
+		"type": "number",
+		"minimum": 10,
+		"maximum": 10000,
+		"suggested_minimum": 100,
+		"suggested_maximum": 1000
+	}
+  }
+}
