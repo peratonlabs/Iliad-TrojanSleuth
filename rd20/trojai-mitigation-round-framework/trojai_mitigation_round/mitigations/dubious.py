@@ -98,7 +98,7 @@ class DubiousTrojai(TrojAIMitigation):
                 #print("Poioson Prediction")
                 img = transform(img, 0, best_params[1], best_params[2], 1.0, 1)
             else:
-                img = transform(img, best_params[0], best_params[1], best_params[2], 0.1, best_params[4])
+                img = transform(img, best_params[0], best_params[1], best_params[2], 0.5, best_params[4])
             final_x = torch.cat([final_x, img], axis=0)
         logits = model(final_x.to(self.device)).detach().cpu()
         #print("Mean: ", torch.mean(logits))
