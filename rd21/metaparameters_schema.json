@@ -3,7 +3,7 @@
   "title": "Peraton Trojan Detection Container",
   "technique": "Weight Analysis",
   "technique_description": "Extracts model weights and trains a random forest classifier.",
-  "technique_changes": "Threshold on fourth bias term greater than 0",
+  "technique_changes": "Threshold on fourth bias term greater than 0.1",
   "technique_type": ["Weight Analysis"],
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd20",

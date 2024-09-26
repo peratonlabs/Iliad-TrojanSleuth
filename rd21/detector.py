@@ -205,7 +205,7 @@ class Detector(AbstractDetector):
         model, model_repr, model_class = load_model(model_filepath)
         bias_score = model_repr['fc_2.bias'][4]
 
-        if bias_score > 0:
+        if bias_score > 0.1:
             probability = 0.75
         else:
             probability = 0.25
