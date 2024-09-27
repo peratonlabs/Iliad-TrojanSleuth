@@ -203,7 +203,7 @@ class Detector(AbstractDetector):
             round_training_dataset_dirpath:
         """
         model, model_repr, model_class = load_model(model_filepath)
-        bias_score = model_repr['fc_2.bias'][4]
+        bias_score = np.mean(model_repr['fc_2.bias'])#[4]
 
         if bias_score < -0.1:
             probability = 0.75
