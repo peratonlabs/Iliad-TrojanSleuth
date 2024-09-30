@@ -2,11 +2,13 @@ import json
 import logging
 import os
 import pickle
+import random
 from os import listdir, makedirs
 from os.path import join, exists, basename
 import base64
 import bsdiff4
 
+import torch
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import accuracy_score
@@ -24,7 +26,28 @@ from utils.reduction import (
     use_feature_reduction_algorithm,
 )
 
-import torch
+class GradientStorage:
+        """
+        Code from https://github.com/BillChan226/AgentPoison
+        """
+        def __init__(self, module, num_adv_passage_tokens):
+            self._stored_gradient = None
+            self.num_adv_passage_tokens = num_adv_passage_tokens
+            module.register_full_backward_hook(self.hook)
+            self.counter = 0
+
+        def hook(self, module, grad_in, grad_out):
+            #print(grad_out[0].shape)
+            if self.counter%2==0:
+                if self._stored_gradient is None:
+                    self._stored_gradient = grad_out[0][:, -self.num_adv_passage_tokens:]
+                else:
+                    self._stored_gradient += grad_out[0][:, -self.num_adv_passage_tokens:]
+            self.counter += 1
+
+        def get(self):
+            return self._stored_gradient
+
 class Detector(AbstractDetector):
     def __init__(self, metaparameter_filepath, learned_parameters_dirpath):
         """Detector initialization function.
@@ -71,6 +94,7 @@ class Detector(AbstractDetector):
         Args:
             models_dirpath: str - Path to the list of model to use for training
         """
+        method = "trigger_inversion"
         # Create the learned parameter folder if needed
         if not exists(self.learned_parameters_dirpath):
             makedirs(self.learned_parameters_dirpath)
@@ -97,10 +121,19 @@ class Detector(AbstractDetector):
                 model = models.pop(0)
 
                 print(model.keys())
-        for key in model:
-            print(key, model[key].shape)
-        bias_score = np.mean(model['fc_2.bias'])
-        print(bias_score)
+                
+        if method == "bias_analysis":
+            for key in model:
+                print(key, model[key].shape)
+            #bias_score = np.mean(model['fc_2.bias'])
+            bias_score = model['fc_2.bias'][4]
+            print(bias_score)
+        
+        if method == "trigger_inversion":
+            for model_filepath in model_path_list:
+                model, model_repr, model_class = load_model(os.path.join(model_filepath, "model.pt"))
+                change_rate = self.trigger_inversion(model)
+                print(change_rate)
 
         logging.info("Saving RandomForest model...")
         with open(self.model_filepath, "wb") as fp:
@@ -128,7 +161,70 @@ class Detector(AbstractDetector):
             archs.append(arch)
             sizes.append(size)
 
+    def get_replacement_byte(self, averaged_grad,
+                    embedding_matrix,
+                    increase_loss=False,
+                    num_candidates=1):
+        
+        with torch.no_grad():
+            gradient_dot_embedding_matrix = torch.matmul(
+                embedding_matrix,
+                averaged_grad
+            )
 
+            if not increase_loss:
+                gradient_dot_embedding_matrix *= -1
+            
+            _, top_k_ids = gradient_dot_embedding_matrix.topk(num_candidates)
+
+        return top_k_ids
+    
+    def trigger_inversion(self, model):
+        device = 'cpu'
+        if torch.cuda.is_available():
+            device = 'cuda'
+        model = model.to(device)
+        gradient_attack = True
+        
+        input_shape = model.embd.weight.shape[0]
+        num_bytes = 100
+        num_steps = 50
+        num_runs = 25
+        target_class = 4
+        predicted_classes = []
+        
+        for run in range(num_runs):
+        
+            random_input = torch.FloatTensor(np.random.uniform(0,255,(1, num_bytes)))
+            random_input = torch.nn.utils.rnn.pad_sequence(random_input, batch_first=True).to(device)
+            embeddings = model.embd
+            embedding_gradient = GradientStorage(embeddings, num_bytes)
+            
+            if gradient_attack:
+                for i in range(num_steps):
+                    model.zero_grad()
+                    logits , _, _= model(random_input)
+                    logits[0][target_class].backward()
+                    temp_grad = embedding_gradient.get()
+                    grad = temp_grad.sum(dim=0)
+                    token_i = random.randint(0,num_bytes-1)
+                    candidates = self.get_replacement_byte(grad[token_i],
+                                    embeddings.weight,
+                                    increase_loss=True,
+                                    num_candidates=1)
+                    #print(candidates, torch.argmax(logits,axis=1).detach().cpu(), logits[0][4].detach().cpu())
+                    random_input[0][token_i] = candidates[0]
+            else:
+                logits , _, _= model(random_input)
+            #print(torch.argmax(logits,axis=1).detach().cpu(), logits[0][target_class].detach().cpu())
+            p = np.argmax(logits.detach().cpu().numpy(),axis=1)
+            #print(p[0])
+            predicted_classes.append(p[0])
+        #print(predicted_classes, predicted_classes.count(target_class))
+        target_class_count = predicted_classes.count(target_class)
+        class_change_rate = target_class_count/len(predicted_classes)
+        return class_change_rate
+        
     def inference_on_example_data(self, model, examples_dirpath):
         """Method to demonstrate how to inference on a round's example data.
 
@@ -203,12 +299,15 @@ class Detector(AbstractDetector):
             round_training_dataset_dirpath:
         """
         model, model_repr, model_class = load_model(model_filepath)
-        bias_score = np.mean(model_repr['fc_2.bias'])#[4]
+        # bias_score = model_repr['fc_2.bias'][4]#np.mean(model_repr['fc_2.bias'])
 
-        if bias_score < -0.1:
-            probability = 0.75
-        else:
-            probability = 0.25
+        # if bias_score > 0:
+        #     probability = 0.75
+        # else:
+        #     probability = 0.25
+        
+        change_rate = self.trigger_inversion(model)
+        probability = change_rate
         
         probability = str(probability)
         with open(result_filepath, "w") as fp:
