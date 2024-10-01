@@ -188,7 +188,7 @@ class Detector(AbstractDetector):
         
         input_shape = model.embd.weight.shape[0]
         num_bytes = 100
-        num_steps = 50
+        num_steps = 10
         num_runs = 25
         target_class = 4
         predicted_classes = []
