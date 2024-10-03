@@ -187,7 +187,7 @@ class Detector(AbstractDetector):
         gradient_attack = False
         
         #input_shape = model.embd.weight.shape[0]
-        num_bytes = 10
+        num_bytes = 100
         num_steps = 50
         num_runs = 100
         target_class = 4
