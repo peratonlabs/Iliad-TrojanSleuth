@@ -12,6 +12,7 @@ import torch
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import accuracy_score
+import scipy
 
 from tqdm import tqdm
 
@@ -103,24 +104,24 @@ class Detector(AbstractDetector):
         model_path_list = sorted([join(models_dirpath, model) for model in listdir(models_dirpath)])
         logging.info(f"Loading %d models...", len(model_path_list))
 
-        model_repr_dict, model_ground_truth_dict = load_models_dirpath(model_path_list)
+        # model_repr_dict, model_ground_truth_dict = load_models_dirpath(model_path_list)
 
-        models_padding_dict = create_models_padding(model_repr_dict)
-        # with open(self.models_padding_dict_filepath, "wb") as fp:
-        #     pickle.dump(models_padding_dict, fp)
+        # models_padding_dict = create_models_padding(model_repr_dict)
+        # # with open(self.models_padding_dict_filepath, "wb") as fp:
+        # #     pickle.dump(models_padding_dict, fp)
 
-        for model_class, model_repr_list in model_repr_dict.items():
-            for index, model_repr in enumerate(model_repr_list):
-                model_repr_dict[model_class][index] = pad_model(model_repr, model_class, models_padding_dict)
+        # for model_class, model_repr_list in model_repr_dict.items():
+        #     for index, model_repr in enumerate(model_repr_list):
+        #         model_repr_dict[model_class][index] = pad_model(model_repr, model_class, models_padding_dict)
 
-        check_models_consistency(model_repr_dict)
+        # check_models_consistency(model_repr_dict)
         
-        for _ in range(len(model_repr_dict)):
-            (model_arch, models) = model_repr_dict.popitem()
-            for _ in tqdm(range(len(models))):
-                model = models.pop(0)
+        # for _ in range(len(model_repr_dict)):
+        #     (model_arch, models) = model_repr_dict.popitem()
+        #     for _ in tqdm(range(len(models))):
+        #         model = models.pop(0)
 
-                print(model.keys())
+        #         print(model.keys())
                 
         if method == "bias_analysis":
             for key in model:
@@ -130,6 +131,12 @@ class Detector(AbstractDetector):
             print(bias_score)
         
         if method == "trigger_inversion":
+            # print(scipy.stats.entropy([0.2,0.2,0.2,0.2,0.2]))
+            # print(scipy.stats.entropy([0.1,0.2,0.2,0.4,0.1]))
+            # print(scipy.stats.entropy([0.1,0.1,0.1,0.6,0.1]))
+            # print(scipy.stats.entropy([0.0,0.0,0.1,0.8,0.1]))
+            # print(scipy.stats.entropy([0.0,0.0,0.1,0.9,0.0]))
+            # print(1/0)
             for model_filepath in model_path_list:
                 model, model_repr, model_class = load_model(os.path.join(model_filepath, "model.pt"))
                 change_rate = self.trigger_inversion(model)
@@ -184,11 +191,11 @@ class Detector(AbstractDetector):
         if torch.cuda.is_available():
             device = 'cuda'
         model = model.to(device)
-        gradient_attack = False
+        gradient_attack = True
         
         #input_shape = model.embd.weight.shape[0]
         num_bytes = 100
-        num_steps = 50
+        num_steps = 5
         num_runs = 100
         target_class = 4
         predicted_classes = []
@@ -200,10 +207,10 @@ class Detector(AbstractDetector):
             embeddings = model.embd
             embedding_gradient = GradientStorage(embeddings, num_bytes)
             
+            model.zero_grad()
+            logits , _, _= model(random_input)
             if gradient_attack:
                 for i in range(num_steps):
-                    model.zero_grad()
-                    logits , _, _= model(random_input)
                     logits[0][target_class].backward()
                     temp_grad = embedding_gradient.get()
                     grad = temp_grad.sum(dim=0)
@@ -214,8 +221,9 @@ class Detector(AbstractDetector):
                                     num_candidates=1)
                     #print(candidates, torch.argmax(logits,axis=1).detach().cpu(), logits[0][4].detach().cpu())
                     random_input[0][token_i] = candidates[0]
-            else:
-                logits , _, _= model(random_input)
+                    model.zero_grad()
+                    logits , _, _= model(random_input)
+
             #print(torch.argmax(logits,axis=1).detach().cpu(), logits[0][target_class].detach().cpu())
             p = np.argmax(logits.detach().cpu().numpy(),axis=1)
             #print(p[0])
@@ -223,6 +231,10 @@ class Detector(AbstractDetector):
         #print(predicted_classes, predicted_classes.count(target_class))
         target_class_count = predicted_classes.count(target_class)
         class_change_rate = target_class_count/len(predicted_classes)
+        #classes = [0,1,2,3,4]
+        #class_probs = [predicted_classes.count(c)/len(predicted_classes) for c in classes]
+        #print(class_probs)
+        #entropy = scipy.stats.entropy(class_probs)
         return class_change_rate
         
     def inference_on_example_data(self, model, examples_dirpath):
