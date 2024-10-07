@@ -191,10 +191,10 @@ class Detector(AbstractDetector):
         if torch.cuda.is_available():
             device = 'cuda'
         model = model.to(device)
-        gradient_attack = True
+        gradient_attack = False
         
         #input_shape = model.embd.weight.shape[0]
-        num_bytes = 100
+        num_bytes = 255
         num_steps = 5
         num_runs = 100
         target_class = 4
