@@ -194,7 +194,7 @@ class Detector(AbstractDetector):
         gradient_attack = False
         
         #input_shape = model.embd.weight.shape[0]
-        num_bytes = 255
+        num_bytes = 100
         num_steps = 5
         num_runs = 100
         target_class = 4
@@ -231,11 +231,15 @@ class Detector(AbstractDetector):
         #print(predicted_classes, predicted_classes.count(target_class))
         target_class_count = predicted_classes.count(target_class)
         class_change_rate = target_class_count/len(predicted_classes)
-        #classes = [0,1,2,3,4]
-        #class_probs = [predicted_classes.count(c)/len(predicted_classes) for c in classes]
+        classes = [0,1,2,3,4]
+        class_probs = [predicted_classes.count(c)/len(predicted_classes) for c in classes]
         #print(class_probs)
-        #entropy = scipy.stats.entropy(class_probs)
+        entropy = scipy.stats.entropy(class_probs)
+        prob = 1 - self.sigmoid(entropy)
         return class_change_rate
+    
+    def sigmoid(self, x):
+        return 1 / (1 + np.exp(-1*x))
         
     def inference_on_example_data(self, model, examples_dirpath):
         """Method to demonstrate how to inference on a round's example data.
