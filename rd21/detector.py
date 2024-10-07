@@ -235,8 +235,8 @@ class Detector(AbstractDetector):
         class_probs = [predicted_classes.count(c)/len(predicted_classes) for c in classes]
         #print(class_probs)
         entropy = scipy.stats.entropy(class_probs)
-        prob = 1 - self.sigmoid(entropy)
-        return class_change_rate
+        prob = self.sigmoid(entropy)
+        return prob
     
     def sigmoid(self, x):
         return 1 / (1 + np.exp(-1*x))
