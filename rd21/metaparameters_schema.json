@@ -3,7 +3,7 @@
   "title": "Peraton Trojan Detection Container",
   "technique": "Weight Analysis",
   "technique_description": "Determine if Trojan by ease of misclassification.",
-  "technique_changes": "1000 bytes, 100 runs, no gradient, uses entropy metric",
+  "technique_changes": "100 bytes, 100 runs, no gradient, uses sd metric",
   "technique_type": ["Trigger Inversion"],
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd21",
