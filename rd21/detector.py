@@ -194,7 +194,7 @@ class Detector(AbstractDetector):
         gradient_attack = False
         
         #input_shape = model.embd.weight.shape[0]
-        num_bytes = 100
+        num_bytes = 1000
         num_steps = 5
         num_runs = 100
         target_class = 4
@@ -226,7 +226,7 @@ class Detector(AbstractDetector):
 
             #print(torch.argmax(logits,axis=1).detach().cpu(), logits[0][target_class].detach().cpu())
             p = np.argmax(logits.detach().cpu().numpy(),axis=1)
-            #print(p[0])
+            #print(logits, p[0])
             predicted_classes.append(p[0])
         #print(predicted_classes, predicted_classes.count(target_class))
         target_class_count = predicted_classes.count(target_class)
