@@ -95,7 +95,7 @@ class Detector(AbstractDetector):
         Args:
             models_dirpath: str - Path to the list of model to use for training
         """
-        method = "trigger_inversion"
+        method = "jacobian_similarity"#"trigger_inversion"
         # Create the learned parameter folder if needed
         if not exists(self.learned_parameters_dirpath):
             makedirs(self.learned_parameters_dirpath)
@@ -141,6 +141,10 @@ class Detector(AbstractDetector):
                 model, model_repr, model_class = load_model(os.path.join(model_filepath, "model.pt"))
                 change_rate = self.trigger_inversion(model)
                 print(change_rate)
+            
+        if method == "jacobian_similarity":
+            model, model_repr, model_class = load_model(os.path.join(model_path_list[0], "model.pt"))
+            self.jacobian_similarity(model, True, self.learned_parameters_dirpath)
 
         logging.info("Saving RandomForest model...")
         with open(self.model_filepath, "wb") as fp:
@@ -185,6 +189,33 @@ class Detector(AbstractDetector):
             _, top_k_ids = gradient_dot_embedding_matrix.topk(num_candidates)
 
         return top_k_ids
+    
+    def jacobian_similarity(self, model, configure, learned_parameters_dirpath):
+        device = 'cpu'
+        if torch.cuda.is_available():
+            device = 'cuda'
+        model = model.to(device)
+        num_bytes = 10000
+        random_input = torch.FloatTensor(np.random.uniform(0,255,(1, num_bytes)))
+        random_input = torch.nn.utils.rnn.pad_sequence(random_input, batch_first=True).to(device)
+        embeddings = model.embd
+        embedding_gradient = GradientStorage(embeddings, num_bytes)
+        model.zero_grad()
+        logits , _, _= model(random_input)
+        target_class = 4
+        logits[0][target_class].backward()
+        temp_grad = embedding_gradient.get()
+        #print(temp_grad.shape)
+        grad = temp_grad.sum(dim=1)[0]
+        if configure:
+            torch.save(grad, os.path.join(learned_parameters_dirpath,"reference_grad"))
+        else:
+            reference_grad = torch.load(os.path.join(learned_parameters_dirpath,"reference_grad"))
+            cossim = torch.dot(grad, reference_grad) / (torch.sqrt(torch.sum(torch.square(grad))) * torch.sqrt(torch.sum(torch.square(reference_grad))))
+            metric = cossim.detach().cpu().numpy()
+            prob = 1 - self.sigmoid(metric)
+            return prob
+        
     
     def trigger_inversion(self, model):
         device = 'cpu'
@@ -316,6 +347,7 @@ class Detector(AbstractDetector):
             examples_dirpath:
             round_training_dataset_dirpath:
         """
+        method = "jacobian_similarity"#
         model, model_repr, model_class = load_model(model_filepath)
         # bias_score = model_repr['fc_2.bias'][4]#np.mean(model_repr['fc_2.bias'])
 
@@ -324,8 +356,11 @@ class Detector(AbstractDetector):
         # else:
         #     probability = 0.25
         
-        change_rate = self.trigger_inversion(model)
-        probability = change_rate
+        if method == "trigger_inversion":
+            probability = self.trigger_inversion(model)
+        if method == "jacobian_similarity":
+            probability = self.jacobian_similarity(model, False, self.learned_parameters_dirpath)
+        
         
         probability = str(probability)
         with open(result_filepath, "w") as fp:
