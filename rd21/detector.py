@@ -194,7 +194,7 @@ class Detector(AbstractDetector):
         gradient_attack = False
         
         #input_shape = model.embd.weight.shape[0]
-        num_bytes = 100
+        num_bytes = 10000
         num_steps = 5
         num_runs = 100
         target_class = 4
@@ -236,7 +236,7 @@ class Detector(AbstractDetector):
         #print(class_probs)
         entropy = scipy.stats.entropy(class_probs)
         sd = np.std(class_probs)
-        metric = sd
+        metric = entropy
         prob = self.sigmoid(metric)
         return prob
     
