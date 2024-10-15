@@ -211,6 +211,7 @@ class Detector(AbstractDetector):
             torch.save(grad, os.path.join(learned_parameters_dirpath,"reference_grad"))
         else:
             reference_grad = torch.load(os.path.join(learned_parameters_dirpath,"reference_grad"))
+            reference_grad = reference_grad.to(device)
             cossim = torch.dot(grad, reference_grad) / (torch.sqrt(torch.sum(torch.square(grad))) * torch.sqrt(torch.sum(torch.square(reference_grad))))
             metric = cossim.detach().cpu().numpy()
             prob = 1 - self.sigmoid(metric)
@@ -227,7 +228,7 @@ class Detector(AbstractDetector):
         #input_shape = model.embd.weight.shape[0]
         num_bytes = 10000
         num_steps = 5
-        num_runs = 100
+        num_runs = 1000
         target_class = 4
         predicted_classes = []
         
@@ -347,7 +348,7 @@ class Detector(AbstractDetector):
             examples_dirpath:
             round_training_dataset_dirpath:
         """
-        method = "jacobian_similarity"#
+        method = "trigger_inversion"#
         model, model_repr, model_class = load_model(model_filepath)
         # bias_score = model_repr['fc_2.bias'][4]#np.mean(model_repr['fc_2.bias'])
 
