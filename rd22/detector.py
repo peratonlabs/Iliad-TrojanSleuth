@@ -14,8 +14,13 @@ import joblib
 
 from collections import namedtuple
 
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier, BaggingClassifier, GradientBoostingClassifier
 from sklearn.metrics import roc_auc_score, log_loss
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.model_selection import cross_val_score, GridSearchCV, train_test_split
+
 
 import utils.models
 from utils.abstract import AbstractDetector
@@ -94,9 +99,9 @@ class Detector(AbstractDetector):
             #if "tinyroberta" not in arch: continue
             size = sizes[arch_i]
             print(arch)
-            #if os.path.exists(os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib")):
-            #    importances = joblib.load(os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib"))
-            for param_n_train in [1]:#range(size):
+            if os.path.exists(os.path.join("data_"+arch_name+".joblib")):
+                data = joblib.load(os.path.join("data_"+arch_name+".joblib"))
+            else:
                 importances = []
                 features = []
                 labels = []
@@ -156,7 +161,7 @@ class Detector(AbstractDetector):
                     importances.append(importance)
                     print("parameter_index: ", parameter_index)
                 #print(importances)
-                #joblib.dump(np.array(importances), os.path.join(self.learned_parameters_dirpath, "imp_"+arch_name+".joblib"))
+                joblib.dump(importances, os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib"))
                 #print(1/0)
             
                 for i, model_dirpath in enumerate(model_path_list):
@@ -184,13 +189,12 @@ class Detector(AbstractDetector):
                 print(features.shape, labels.shape)
                 #features = scale(features, axis=0)
                 data = np.concatenate((features, labels), axis=1)
-                #joblib.dump(data, os.path.join("data_"+arch_name+".joblib"))
-                #data = joblib.load(os.path.join("data_"+arch_name+".joblib"))
-                logging.info("Training classifier...")
-                model, overall_importance = self.train_wa_model(data)
+                joblib.dump(data, os.path.join("data_"+arch_name+".joblib"))
+            #data = joblib.load(os.path.join("data_"+arch_name+".joblib"))
+            logging.info("Training classifier...")
+            model, overall_importance = self.train_wa_model(data)
             logging.info("Saving classifier and parameters...")
             joblib.dump(model, os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
-            joblib.dump(importances, os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib"))
             joblib.dump(overall_importance, os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch+".joblib"))
 
         self.write_metaparameters()
@@ -254,7 +258,7 @@ class Detector(AbstractDetector):
         #clf_svm = SVC(probability=True, kernel='rbf')
         #parameters = {'gamma':[0.001,0.01,0.1,1,10], 'C':[0.001,0.01,0.1,1,10]}
         #clf_svm = GridSearchCV(clf_svm, parameters)
-        #clf_svm = BaggingClassifier(base_estimator=clf_svm, n_estimators=6, max_features=0.83, bootstrap=False)
+        #clf_svm = BaggingClassifier(clf_svm, n_estimators=6, max_features=0.83, bootstrap=False)
         clf_rf = RandomForestClassifier(n_estimators=500)
         #clf_svm = CalibratedClassifierCV(clf_svm, ensemble=False)
         #clf_lr = LogisticRegression()
@@ -268,7 +272,7 @@ class Detector(AbstractDetector):
         test_aucs = []
         train_ces = []
         test_ces = []
-        for _ in range(5):
+        for _ in range(10):
             idx = np.random.choice(dt.shape[0], size=dt.shape[0], replace=False)
             dt = dt[idx, :]
             #print(dt.shape)
@@ -289,7 +293,7 @@ class Detector(AbstractDetector):
 
             clf = clf_rf.fit(X_train, y_train)
             importance_full = np.argsort(clf.feature_importances_)
-            importance = importance_full[self.num_features:]
+            importance = importance_full[-1*self.num_features:]
             #clf = clf_lasso.fit(X_train, y_train)
             #lasso_coef = np.abs(clf.coef_)
             #
@@ -301,7 +305,7 @@ class Detector(AbstractDetector):
             #X_test = sc.transform(X_test)
             #X_test = scale(X_test, axis=1)
 
-            clf = clf_rf
+            clf = clf_rf#CalibratedClassifierCV(clf_rf, ensemble=False)
             #clf = CalibratedClassifierCV(clf, ensemble=False)
             #print(X_train.shape, X_test.shape)
             clf.fit(X_train, y_train)
@@ -325,7 +329,7 @@ class Detector(AbstractDetector):
         print("Test acc: ", np.mean(test_accs))
         print("Test auc: ", np.mean(test_aucs))
         print("Test ce: ", np.mean(test_ces))
-        clf = clf.fit(X, y)
+        clf = clf.fit(X[:,importance], y)
         return clf, importance
 
     def inference_on_example_data(self, model_filepath, examples_dirpath):
@@ -385,24 +389,31 @@ class Detector(AbstractDetector):
             round_training_dataset_dirpath:
         """
 
-        # Inferences on examples to demonstrate how it is done for a round
-        self.inference_on_example_data(model_filepath, examples_dirpath)
 
-        # build a fake random feature vector for this model, in order to compute its probability of poisoning
-        rso = np.random.RandomState(seed=self.weight_params['rso_seed'])
-        X = rso.normal(loc=self.weight_params['mean'], scale=self.weight_params['std'], size=(1, self.input_features))
+        device = 'cpu'
+        model, model_repr, model_class = load_model(model_filepath)
+        #self.inference_on_example_data(model, examples_dirpath)
+        archs = ['[32, 32]', '[64]']
+        sizes = [34, 30]
+        
+        for arch_i in range(len(archs)):
 
-        # load the RandomForest from the learned-params location
-        with open(self.model_filepath, "rb") as fp:
-            regressor: RandomForestRegressor = pickle.load(fp)
+            arch = archs[arch_i]
+            size = sizes[arch_i]
 
-        # use the RandomForest to predict the trojan probability based on the feature vector X
-        probability = regressor.predict(X)[0]
-        # clip the probability to reasonable values
-        probability = np.clip(probability, a_min=0.01, a_max=0.99)
+            clf = joblib.load(os.path.join(self.learned_parameters_dirpath, "clf_"+arch+".joblib"))
+            #scaler = load(os.path.join(self.learned_parameters_dirpath, "scaler_"+arch+".joblib"))
+            importances = joblib.load(os.path.join(self.learned_parameters_dirpath, "imp_"+arch+".joblib"))
+            overall_importances = joblib.load(os.path.join(self.learned_parameters_dirpath, "overallImp_"+arch+".joblib"))
 
-        # write the trojan probability to the output file
-        with open(result_filepath, "w") as fp:
-            fp.write(str(probability))
+            features = self.weight_analysis_configure(model, arch, size, importances, device)
+            #import math
+            if features != None:
+                features = np.array(features.detach().cpu()).reshape(1,-1)
+                features = features[:,overall_importances]
+                #print(features.shape)
+                trojan_probability = clf.predict_proba(features)[0][1]
+                logging.info('Trojan Probability: {}'.format(trojan_probability))
 
-        logging.info("Trojan probability: {}".format(probability))
+                with open(result_filepath, 'w') as fh:
+                    fh.write("{}".format(trojan_probability))
