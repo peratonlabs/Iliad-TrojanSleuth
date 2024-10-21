@@ -1,22 +1,30 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Peraton Trojan Detection Container",
+  "title": "Peraton Trojan Detection Container.",
   "technique": "Weight Analysis",
-  "technique_description": "Determine if Trojan by ease of misclassification.",
-  "technique_changes": "20000 bytes, 100 runs, no gradient, uses entropy as metric",
-  "technique_type": ["Trigger Inversion"],
-  "commit_id": "",
-  "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd21",
+  "technique_description": "Train a random forest on the parameters of the network.",
+  "technique_changes": "Select different weights for each architecture",
+  "technique_type": ["Weight Analysis"],
+  "commit_id": "4f20e38dde2bcafba63fbed180450ee6d6274c4d",
+  "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd18",
   "required": [],
   "additionalProperties": false,
   "type": "object",
   "properties": {
-	"num_features": {
-		"description": "Number of parameters to train classifier on.",
-		"type": "number",
-		"minimum": 10,
-		"maximum": 10000,
-		"suggested_minimum": 100,
+	"train_num_perturbations":  {
+		"description": "Number of random noise perturbations to apply. Each will have a gradient calculated, which is averaged into a feature vector.",
+		"type": "integer",
+		"minimum": 1,
+		"maximum": 1000,
+		"suggested_minimum": 10,
+		"suggested_maximum": 1000
+	},
+	"infer_num_perturbations":  {
+		"description": "Number of random noise perturbations to apply. Each will have a gradient calculated, which is averaged into a feature vector.",
+		"type": "integer",
+		"minimum": 1,
+		"maximum": 1000,
+		"suggested_minimum": 10,
 		"suggested_maximum": 1000
 	}
   }
