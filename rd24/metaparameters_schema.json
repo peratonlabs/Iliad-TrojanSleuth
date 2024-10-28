@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Peraton Trojan Detection Container",
+  "technique": "Weight Analysis",
+  "technique_description": "Determine if Trojan by training a classifier on the most important weights.",
+  "technique_changes": "Initial submission",
+  "technique_type": ["Weight Analysis"],
+  "commit_id": "",
+  "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd24",
+  "required": [],
+  "additionalProperties": false,
+  "type": "object",
+  "properties": {
+	"num_features":  {
+		"description": "The input features for training.",
+		"type": "integer",
+		"minimum": 10,
+		"maximum": 20000,
+		"suggested_minimum": 100,
+		"suggested_maximum": 10000
+	}
+  }
+}
