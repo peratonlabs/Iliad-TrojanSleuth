@@ -3,7 +3,7 @@
   "title": "Peraton Trojan Detection Container",
   "technique": "Weight Analysis",
   "technique_description": "Determine if Trojan by training a classifier on the most important weights.",
-  "technique_changes": "Initial submission",
+  "technique_changes": "Reduced number of features to 100",
   "technique_type": ["Weight Analysis"],
   "commit_id": "",
   "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd24",
