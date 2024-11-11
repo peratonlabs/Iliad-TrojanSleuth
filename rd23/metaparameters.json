@@ -15,5 +15,5 @@
     "batch_size": 2,
     "bf16": true,
     "max_token_length":512,
-    "num_drops":1000
+    "num_drops":10000
 }
