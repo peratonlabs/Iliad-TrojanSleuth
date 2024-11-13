@@ -3,7 +3,7 @@
     "title": "Peraton Trojan Detection Container",
     "technique": "Pruning",
     "technique_description": "Drop smallest parameters from the network",
-    "technique_changes": "Drop smallest 1000000 parameters per layer",
+    "technique_changes": "Drop smallest 1 percent of parameters per layer",
     "technique_type": ["Weight Modification"],
     "commit_id": "",
     "repo_name": "https://github.com/perspectalabs/Iliad-TrojanSleuth/tree/main/rd23",
@@ -11,9 +11,9 @@
     "additionalProperties": false,
     "type": "object",
     "properties": {
-      "num_drops":  {
-          "description": "The number of parameters to zero from each decoder layer of the network",
-          "type": "integer"
+      "drop_ratio":  {
+          "description": "The ratio of parameters to zero from each layer of the network",
+          "type": "number"
       },
       "optim":  {
           "description": "The torch optimizer used for fine tuning",

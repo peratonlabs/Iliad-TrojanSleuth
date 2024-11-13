@@ -1,7 +1,7 @@
 import os
+import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from peft import LoraConfig, TaskType
-import torch
 import jsonschema
 import json
 from datasets import load_dataset, Dataset
@@ -42,7 +42,7 @@ RESPONSE_TEMPLATE_LOOKUP = {
 
 def prepare_mitigation(config_json, argv):
     mitigation = PruningTrojaiMitigationLLM(
-        num_drops = config_json['num_drops']
+        drop_ratio = config_json['drop_ratio']
         # lr=config_json['learning_rate'],
         # train_epochs=config_json['num_train_epochs'],
         # optim=config_json['optim'],

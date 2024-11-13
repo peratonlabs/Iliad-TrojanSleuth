@@ -27,9 +27,9 @@ class debugOutput():
             return {'text_results':1}
 
 class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
-    def __init__(self, num_drops=0, **kwargs):
+    def __init__(self, drop_ratio=0, **kwargs):
         super().__init__(**kwargs)
-        self.num_drops = num_drops
+        self.drop_ratio = drop_ratio
 
     def mitigate_model(self,  model: AutoModel, collator: DataCollatorForLanguageModeling, peft_config: LoraConfig, dataset: HF_Dataset):
         # target_token_length = collator.tokenizer.model_max_length
@@ -48,6 +48,12 @@ class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
             for i in range(len(model.model.layers)):
                 #print(model.model.layers[i].mlp.down_proj._parameters['weight'].flatten().shape)
                 #print(torch.sort(torch.abs(model.model.layers[i].mlp.down_proj._parameters['weight'].flatten())))
+                self.drop_parameters(model.model.layers[i].self_attn.q_proj._parameters['weight'])
+                self.drop_parameters(model.model.layers[i].self_attn.k_proj._parameters['weight'])
+                self.drop_parameters(model.model.layers[i].self_attn.v_proj._parameters['weight'])
+                self.drop_parameters(model.model.layers[i].self_attn.o_proj._parameters['weight'])
+                self.drop_parameters(model.model.layers[i].mlp.gate_proj._parameters['weight'])
+                self.drop_parameters(model.model.layers[i].mlp.up_proj._parameters['weight'])
                 self.drop_parameters(model.model.layers[i].mlp.down_proj._parameters['weight'])
                 #print(torch.sort(torch.abs(model.model.layers[i].mlp.down_proj._parameters['weight'].flatten())))
                 #print(1/0)
@@ -59,7 +65,11 @@ class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
     
     
     def drop_parameters(self, layer):
-        smallest_param_indices = torch.sort(torch.abs(layer.flatten()))[1][:self.num_drops]
-        for j in range(self.num_drops):
-            layer.flatten()[smallest_param_indices[j]] = 0
+        flattened_parameters = layer.flatten()
+        #print(flattened_parameters.shape)
+        num_drops = int(self.drop_ratio * flattened_parameters.shape[0])
+        #print(num_drops)
+        smallest_param_indices = torch.sort(torch.abs(flattened_parameters))[1][:num_drops]
+        for j in range(num_drops):
+            flattened_parameters[smallest_param_indices[j]] = 0
         
