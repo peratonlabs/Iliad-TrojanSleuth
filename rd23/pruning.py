@@ -39,7 +39,7 @@ class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
         # peft_model = get_peft_model(model, peft_config)
         # now = datetime.datetime.now()
         # formatted  = now.strftime("%Y%m%d%H%M%S.%f")[:-3]
-        
+        #print(model)
         # print(model.model.layers)
         # print(len(model.model.layers))
         #model.eval()
@@ -48,14 +48,18 @@ class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
             for i in range(len(model.model.layers)):
                 #print(model.model.layers[i].mlp.down_proj._parameters['weight'].flatten().shape)
                 #print(torch.sort(torch.abs(model.model.layers[i].mlp.down_proj._parameters['weight'].flatten())))
-                smallest_param_indices = torch.sort(torch.abs(model.model.layers[i].mlp.down_proj._parameters['weight'].flatten()))[1][:self.num_drops]
-                for j in range(self.num_drops):
-                    model.model.layers[i].mlp.down_proj._parameters['weight'].flatten()[smallest_param_indices[j]] = 0
+                self.drop_parameters(model.model.layers[i].mlp.down_proj._parameters['weight'])
                 #print(torch.sort(torch.abs(model.model.layers[i].mlp.down_proj._parameters['weight'].flatten())))
                 #print(1/0)
+            #print(model.lm_head._parameters['weight'].flatten().shape)
+            self.drop_parameters(model.lm_head._parameters['weight'])
         # print(model)
-        
-        
 
         return model
+    
+    
+    def drop_parameters(self, layer):
+        smallest_param_indices = torch.sort(torch.abs(layer.flatten()))[1][-1*self.num_drops:]
+        for j in range(self.num_drops):
+            layer.flatten()[smallest_param_indices[j]] = 0
         
