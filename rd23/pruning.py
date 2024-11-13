@@ -59,7 +59,7 @@ class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
     
     
     def drop_parameters(self, layer):
-        smallest_param_indices = torch.sort(torch.abs(layer.flatten()))[1][-1*self.num_drops:]
+        smallest_param_indices = torch.sort(torch.abs(layer.flatten()))[1][:self.num_drops]
         for j in range(self.num_drops):
             layer.flatten()[smallest_param_indices[j]] = 0
         
