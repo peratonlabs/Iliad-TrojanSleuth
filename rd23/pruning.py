@@ -60,7 +60,7 @@ class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
             #print(model.lm_head._parameters['weight'].flatten().shape)
             self.drop_parameters(model.lm_head._parameters['weight'])
         # print(model)
-
+        #print(1/0)
         return model
     
     
@@ -70,6 +70,5 @@ class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
         num_drops = int(self.drop_ratio * flattened_parameters.shape[0])
         #print(num_drops)
         smallest_param_indices = torch.sort(torch.abs(flattened_parameters))[1][:num_drops]
-        for j in range(num_drops):
-            flattened_parameters[smallest_param_indices[j]] = 0
+        flattened_parameters[smallest_param_indices] = 0
         
