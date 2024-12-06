@@ -44,8 +44,10 @@ class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
         # print(len(model.model.layers))
         #model.eval()
         #model.requires_grad = False
+        num_layers_to_use = 10
+        last_layer = False
         with torch.no_grad():
-            for i in range(len(model.model.layers)):
+            for i in range(num_layers_to_use):#len(model.model.layers)):
                 #print(model.model.layers[i].mlp.down_proj._parameters['weight'].flatten().shape)
                 #print(torch.sort(torch.abs(model.model.layers[i].mlp.down_proj._parameters['weight'].flatten())))
                 self.drop_parameters(model.model.layers[i].self_attn.q_proj._parameters['weight'])
@@ -58,7 +60,8 @@ class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
                 #print(torch.sort(torch.abs(model.model.layers[i].mlp.down_proj._parameters['weight'].flatten())))
                 #print(1/0)
             #print(model.lm_head._parameters['weight'].flatten().shape)
-            self.drop_parameters(model.lm_head._parameters['weight'])
+            if last_layer:
+                self.drop_parameters(model.lm_head._parameters['weight'])
         # print(model)
         #print(1/0)
         return model
