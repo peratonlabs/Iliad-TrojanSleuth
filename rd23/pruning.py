@@ -44,7 +44,7 @@ class PruningTrojaiMitigationLLM(TrojAIMitigationLLM):
         # print(len(model.model.layers))
         #model.eval()
         #model.requires_grad = False
-        num_layers_to_use = 10
+        num_layers_to_use = 18
         last_layer = False
         with torch.no_grad():
             for i in range(num_layers_to_use):#len(model.model.layers)):
